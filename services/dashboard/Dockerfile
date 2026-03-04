@@ -34,12 +34,11 @@ RUN pip install --no-cache-dir gunicorn gevent
 # Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
 
-# Copy application files
-COPY ./services/dashboard .
+# Copy application files (paths are relative to the build context)
+COPY . .
 
-# Entrypoint
-# docker-entrypoint.sh lives in app/dashboard relative to project root
-COPY ./services/dashboard/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# Entrypoint (copy from build context)
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 5000
