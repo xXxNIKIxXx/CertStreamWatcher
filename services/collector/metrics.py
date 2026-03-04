@@ -183,6 +183,11 @@ class MetricsManager:
             "Time spent writing a certificate to the database",
             buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
         )
+        self.db_batch_size = Histogram(
+            "ct_db_batch_size",
+            "Number of rows written in a single DB batch",
+            buckets=(1, 10, 50, 100, 250, 500),
+        )
         self.db_pool_size = Gauge(
             "ct_db_pool_size",
             "Current database connection pool size",
@@ -277,6 +282,7 @@ class MetricsManager:
         self.db_writes_total = self._noop
         self.db_write_errors_total = self._noop
         self.db_write_duration_seconds = self._noop
+        self.db_batch_size = self._noop
         self.db_pool_size = self._noop
         self.db_available = self._noop
         # Redis
