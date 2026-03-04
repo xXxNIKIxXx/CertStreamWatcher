@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Health – CertStream Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="mb-0">System Health</h4>
+  <button class="btn btn-outline-secondary btn-sm" onclick="refresh()">
+    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+  </button>
+</div>
+
+<!-- Status cards -->
+<div class="row g-3 mb-4" id="health-cards">
+  <!-- Database -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">
+          <i class="bi bi-database me-1"></i>TimescaleDB
+        </h6>
+        <div id="db-status">
+          <span class="dot dot-mute"></span>
+          <span class="text-body-secondary small">Checking…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Redis -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">
+          <i class="bi bi-hdd-network me-1"></i>Redis
+        </h6>
+        <div id="redis-status">
+          {% if redis_configured %}
+          <span class="dot dot-mute"></span>
+          <span class="text-body-secondary small">Checking…</span>
+          {% else %}
+          <span class="dot dot-warn"></span>
+          <span class="small">Disabled (no CT_REDIS_URL)</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Collectors -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">
+          <i class="bi bi-cpu me-1"></i>Collectors
+          <span class="text-body-secondary" id="collector-count"></span>
+        </h6>
+        <div id="collectors-summary">
+          <span class="dot dot-mute"></span>
+          <span class="text-body-secondary small">Checking…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Collector detail table -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center py-2">
+    <small class="fw-semibold">Collector Details</small>
+    <small class="text-body-secondary">Next refresh in <strong id="countdown">15</strong>s</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>Status</th>
+          <th>Entries Processed</th>
+          <th>Parsed OK</th>
+          <th>Parse Failures</th>
+        </tr>
+      </thead>
+      <tbody id="collector-rows">
+        <tr><td colspan="5" class="text-body-secondary text-center py-3">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function dotHtml(status) {
+  const map = {ok:'dot-ok', disabled:'dot-warn', warn:'dot-warn', error:'dot-err', err:'dot-err', offline:'dot-off'};
+  const cls = map[status] || 'dot-mute';
+  return '<span class="dot ' + cls + '"></span>';
+}
+
+function refresh() {
+  fetch('/monitoring/api/status')
+    .then(r => r.json())
+    .then(data => {
+      // DB
+      const db = data.database;
+      const dbEl = document.getElementById('db-status');
+      if (db.status === 'ok') {
+        dbEl.innerHTML = dotHtml('ok') + ' <strong class="small">Connected</strong><br>' +
+          '<small class="text-body-secondary">' + (db.version || '') + '</small><br>' +
+          '<small>Rows: <strong>' + Number(db.row_count).toLocaleString() + '</strong> · Size: <strong>' + db.db_size + '</strong></small>';
+      } else {
+        dbEl.innerHTML = dotHtml('err') + ' <strong class="small text-danger">Error</strong><br><small class="text-danger">' + (db.error || 'Unknown') + '</small>';
+      }
+
+      // Redis
+      const rd = data.redis;
+      const rdEl = document.getElementById('redis-status');
+      if (rd.status === 'ok') {
+        rdEl.innerHTML = dotHtml('ok') + ' <strong class="small">Connected</strong> (v' + rd.version + ')<br>' +
+          '<small>Uptime: ' + Math.round(rd.uptime_seconds/3600) + 'h · Clients: ' + rd.connected_clients + '</small>';
+      } else if (rd.status === 'disabled') {
+        rdEl.innerHTML = dotHtml('warn') + ' <span class="small">Disabled</span><br><small class="text-body-secondary">' + (rd.info || '') + '</small>';
+      } else {
+        rdEl.innerHTML = dotHtml('err') + ' <strong class="small text-danger">Error</strong><br><small class="text-danger">' + (rd.error || 'Unknown') + '</small>';
+      }
+
+      // Collectors
+      const cols = data.collectors || [];
+      const okCount = cols.filter(c => c.status === 'ok').length;
+      const offCount = cols.filter(c => c.status === 'offline').length;
+      const errCount = cols.filter(c => c.status === 'error').length;
+      const summaryEl = document.getElementById('collectors-summary');
+      const countEl = document.getElementById('collector-count');
+      countEl.textContent = '(' + cols.length + ' tracked)';
+      let summaryParts = '<strong>' + okCount + '</strong> online';
+      if (offCount > 0) summaryParts += ' · <strong class="text-secondary">' + offCount + '</strong> offline';
+      if (errCount > 0) summaryParts += ' · <strong class="text-danger">' + errCount + '</strong> error';
+      if (okCount === cols.length && cols.length > 0) {
+        summaryEl.innerHTML = dotHtml('ok') + ' ' + summaryParts;
+      } else if (offCount > 0 || errCount > 0) {
+        summaryEl.innerHTML = dotHtml(errCount > 0 ? 'err' : 'warn') + ' ' + summaryParts;
+      } else {
+        summaryEl.innerHTML = dotHtml('ok') + ' ' + summaryParts;
+      }
+
+      const tbody = document.getElementById('collector-rows');
+      tbody.innerHTML = '';
+      cols.forEach(c => {
+        const tr = document.createElement('tr');
+        if (c.status === 'offline') tr.classList.add('table-secondary');
+        const statusLabel = c.status === 'offline'
+          ? '<span class="small text-secondary fw-semibold">offline</span>'
+          : '<span class="small">' + c.status + '</span>';
+        tr.innerHTML =
+          '<td><code class="small">' + c.url + '</code></td>' +
+          '<td>' + dotHtml(c.status) + ' ' + statusLabel + '</td>' +
+          '<td class="small">' + (c.entries_processed != null ? Number(c.entries_processed).toLocaleString() : '–') + '</td>' +
+          '<td class="small">' + (c.parsed_success != null ? Number(c.parsed_success).toLocaleString() : '–') + '</td>' +
+          '<td class="small">' + (c.parse_failures != null ? Number(c.parse_failures).toLocaleString() : '–') + '</td>';
+        tbody.appendChild(tr);
+      });
+    })
+    .catch(err => console.error('Health check failed:', err));
+}
+
+const INTERVAL = 15;
+let remaining = INTERVAL;
+const countdownEl = document.getElementById('countdown');
+
+function tick() {
+  remaining--;
+  if (remaining <= 0) {
+    refresh();
+    remaining = INTERVAL;
+  }
+  countdownEl.textContent = remaining;
+}
+
+refresh();
+setInterval(tick, 1000);
+</script>
+{% endblock %}

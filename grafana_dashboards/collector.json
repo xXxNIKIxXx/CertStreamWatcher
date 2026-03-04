@@ -1,0 +1,773 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": ["certstream"],
+      "targetBlank": false,
+      "title": "CertStream Dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "📊 Throughput Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Entries Processed / sec",
+      "description": "Rate of CT log entries being processed across all collectors",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "green", "value": 100 }
+            ]
+          },
+          "unit": "ops"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_entries_processed_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "entries/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Certs Parsed OK / sec",
+      "description": "Successfully parsed certificates per second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "green", "value": 50 }
+            ]
+          },
+          "unit": "ops"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_entries_parsed_success_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "parsed/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Parse Failures / sec",
+      "description": "Certificate parse failures per second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "unit": "ops"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_parse_failures_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "failures/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Extraction Failures / sec",
+      "description": "DER certificate extraction failures per second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "unit": "ops"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_extraction_failures_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "failures/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "CT Logs Monitored",
+      "description": "Total number of CT logs being polled",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_total_logs{job=~\"$job\"})",
+          "legendFormat": "logs"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Poll Errors / sec",
+      "description": "Errors encountered while polling CT logs",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.1 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "ops"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_poll_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Entries Processed Rate by Instance",
+      "description": "Per-collector-replica throughput over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "rate(ct_entries_processed_total{job=~\"$job\"}[$__rate_interval])",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "id": 7
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Success vs Failure Rate",
+      "description": "Parsed OK vs parse + extraction failures over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "failures" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_entries_parsed_success_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "success"
+        },
+        {
+          "expr": "sum(rate(ct_parse_failures_total{job=~\"$job\"}[$__rate_interval])) + sum(rate(ct_extraction_failures_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "failures"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "id": 8
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "id": 101,
+      "title": "⏱️ Certificate Parsing",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Cert Parse Duration (p50 / p95 / p99)",
+      "description": "Certificate parsing latency distribution",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 9
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Certificate Version Distribution",
+      "description": "Breakdown of certificate versions (v1/v2/v3)",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "sum by (version) (increase(ct_certificate_version_total{job=~\"$job\"}[$__range]))",
+          "legendFormat": "{{version}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 14 },
+      "id": 10
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Leaf Type Distribution",
+      "description": "MerkleTreeLeaf leaf_type distribution",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "sum by (leaf_type) (increase(ct_leaf_type_total{job=~\"$job\"}[$__range]))",
+          "legendFormat": "type {{leaf_type}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 14 },
+      "id": 11
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 102,
+      "title": "🌐 CT Log HTTP Fetching",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "HTTP Request Duration (p50 / p95 / p99)",
+      "description": "Latency of HTTP requests to CT log APIs",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "id": 12
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "HTTP Requests by Status Code",
+      "description": "Rate of CT log API requests grouped by HTTP status",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(ct_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "id": 13
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Batch Entries Fetched (p50 / p95)",
+      "description": "How many entries each batch fetch returns",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_batch_entries_fetched_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_batch_entries_fetched_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "id": 14
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Batch Processing Duration (p50 / p95)",
+      "description": "Time to process each batch of CT log entries",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_batch_processing_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_batch_processing_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "id": 15
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "id": 103,
+      "title": "💾 Database (Collector Writes)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Available",
+      "description": "Whether the database connection pool is up",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "ct_db_available{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 40 },
+      "id": 16
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Writes / sec",
+      "description": "Rate of certificate inserts into the database",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_writes_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "writes/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 40 },
+      "id": 17
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Errors / sec",
+      "description": "Rate of failed database writes",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_write_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 40 },
+      "id": 18
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Pool Size",
+      "description": "Current number of connections in the asyncpg pool",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "ct_db_pool_size{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 40 },
+      "id": 19
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Error Rate %",
+      "description": "Percentage of failed writes out of total writes",
+      "type": "gauge",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_write_errors_total{job=~\"$job\"}[$__rate_interval])) / clamp_min(sum(rate(ct_db_writes_total{job=~\"$job\"}[$__rate_interval])), 1)",
+          "legendFormat": "error rate"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 40 },
+      "id": 20
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Duration (p50 / p95 / p99)",
+      "description": "Latency of individual certificate inserts",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 44 },
+      "id": 21
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+      "id": 104,
+      "title": "📡 Redis Publishing",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis Available",
+      "description": "Whether the Redis connection is up",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "ct_redis_available{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 53 },
+      "id": 22
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis Publishes / sec",
+      "description": "Rate of messages published to Redis ct:certs channel",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_redis_publishes_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "pub/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 53 },
+      "id": 23
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis Publish Errors / sec",
+      "description": "Failed Redis publish operations per second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_redis_publish_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 53 },
+      "id": 24
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis Publish Duration (p50 / p95)",
+      "description": "Latency of publishing a cert event to Redis",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_redis_publish_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_redis_publish_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
+      "id": 25
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
+      "id": 105,
+      "title": "🔌 WebSocket Broadcasting",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Active WebSocket Clients",
+      "description": "Currently connected WebSocket consumers",
+      "type": "gauge",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }] },
+          "min": 0, "max": 100
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_websocket_active_clients{job=~\"$job\"})",
+          "legendFormat": "clients"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 62 },
+      "id": 26
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "WS Broadcasts / sec",
+      "description": "Rate of WebSocket broadcast operations",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_ws_broadcasts_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "broadcasts/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 62 },
+      "id": 27
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "WS Delivery Errors / sec",
+      "description": "Failed message deliveries to individual WebSocket clients",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_ws_broadcast_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 62 },
+      "id": 28
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "WS Broadcast Duration (p50 / p95)",
+      "description": "Time to broadcast a message to all connected clients",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_ws_broadcast_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_ws_broadcast_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 18, "x": 0, "y": 66 },
+      "id": 29
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 74 },
+      "id": 106,
+      "title": "📋 Per-Log Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Certificates Processed by Log",
+      "description": "Per-log certificate processing rate",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 1 } }
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "targets": [
+        {
+          "expr": "topk(10, rate(ct_certs_processed_by_log_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{log}}"
+        }
+      ],
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 75 },
+      "id": 30
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Last Processed Index per Log",
+      "description": "Current tree position for each monitored CT log",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "ct_log_last_index{job=~\"$job\"}",
+          "legendFormat": "{{log}}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "job": true }, "renameByName": { "log": "CT Log", "Value": "Last Index", "instance": "Collector" } } }
+      ],
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 85 },
+      "id": 31
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["certstream", "collector"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "default", "value": "default" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "certstream-collectors", "value": "certstream-collectors" },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(ct_entries_processed_total, job)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "job",
+        "query": "label_values(ct_entries_processed_total, job)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CertStream Collector",
+  "uid": "certstream-collector",
+  "version": 1
+}

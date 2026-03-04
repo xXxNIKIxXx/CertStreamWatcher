@@ -1,0 +1,835 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 2,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": ["certstream"],
+      "targetBlank": false,
+      "title": "Drill-down Dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 200,
+      "title": "🩺 System Health",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Database",
+      "description": "Whether the collector can reach the database",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(ct_db_available{job=~\"$collector_job\"})",
+          "legendFormat": "DB"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis",
+      "description": "Whether the collector can reach Redis",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(ct_redis_available{job=~\"$collector_job\"})",
+          "legendFormat": "Redis"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis Subscriber",
+      "description": "Whether the dashboard Redis subscriber thread is alive",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(ct_dashboard_redis_subscriber_up{job=~\"$dashboard_job\"})",
+          "legendFormat": "Subscriber"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Collector Replicas",
+      "description": "Number of active collector instances",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 1 }, { "color": "green", "value": 3 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(up{job=~\"$collector_job\"} == 1)",
+          "legendFormat": "replicas"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard Instances",
+      "description": "Number of active dashboard instances",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(up{job=~\"$dashboard_job\"} == 1)",
+          "legendFormat": "instances"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Pool Size",
+      "description": "Current database connection pool size across collectors",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 15 }, { "color": "red", "value": 20 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_db_pool_size{job=~\"$collector_job\"})",
+          "legendFormat": "connections"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 201,
+      "title": "📈 End-to-End Pipeline Throughput",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Pipeline Throughput",
+      "description": "End-to-end flow: CT entries processed → parsed → DB writes → Redis publishes → WS broadcasts",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_entries_processed_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "1. CT Entries Processed"
+        },
+        {
+          "expr": "sum(rate(ct_entries_parsed_success_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "2. Parsed Successfully"
+        },
+        {
+          "expr": "sum(rate(ct_db_writes_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "3. DB Writes"
+        },
+        {
+          "expr": "sum(rate(ct_redis_publishes_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "4. Redis Publishes"
+        },
+        {
+          "expr": "sum(rate(ct_ws_broadcasts_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "5. WS Broadcasts"
+        },
+        {
+          "expr": "sum(rate(ct_dashboard_socketio_events_emitted_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "6. Dashboard SocketIO Events"
+        }
+      ],
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 6 },
+      "id": 7
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "id": 202,
+      "title": "❌ Error Rates",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Collector Errors / sec",
+      "description": "All collector-side error rates by category",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 15, "lineWidth": 2, "showPoints": "never" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_parse_failures_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "Parse Failures"
+        },
+        {
+          "expr": "sum(rate(ct_extraction_failures_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "Extraction Failures"
+        },
+        {
+          "expr": "sum(rate(ct_poll_errors_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "Poll Errors"
+        },
+        {
+          "expr": "sum(rate(ct_db_write_errors_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "DB Write Errors"
+        },
+        {
+          "expr": "sum(rate(ct_redis_publish_errors_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "Redis Publish Errors"
+        },
+        {
+          "expr": "sum(rate(ct_ws_broadcast_errors_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "WS Broadcast Errors"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "id": 8
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard Errors / sec",
+      "description": "Dashboard-side error rates",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 15, "lineWidth": 2, "showPoints": "never" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_http_requests_total{job=~\"$dashboard_job\", status=~\"5..\"}[$__rate_interval]))",
+          "legendFormat": "HTTP 5xx"
+        },
+        {
+          "expr": "sum(rate(ct_dashboard_http_requests_total{job=~\"$dashboard_job\", status=~\"4..\"}[$__rate_interval]))",
+          "legendFormat": "HTTP 4xx"
+        },
+        {
+          "expr": "sum(rate(ct_dashboard_db_query_errors_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "DB Query Errors"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "id": 9
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "id": 203,
+      "title": "⏱️ Latency Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Collector Latency (p95)",
+      "description": "95th-percentile latencies for collector operations",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "Cert Parse"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "DB Write"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_redis_publish_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "Redis Publish"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_ws_broadcast_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "WS Broadcast"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "CT Log HTTP Fetch"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_batch_processing_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "Batch Processing"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "id": 10
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard Latency (p50 / p95 / p99)",
+      "description": "HTTP request latency for the dashboard",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$dashboard_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$dashboard_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$dashboard_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "id": 11
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 204,
+      "title": "🌐 CT Logs & HTTP",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "CT Log HTTP Status Codes",
+      "description": "Upstream CT log HTTP responses by status",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "2.." }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "4.." }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "5.." }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(ct_http_requests_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 35 },
+      "id": 12
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Batch Size Fetched",
+      "description": "Number of entries per batch from CT logs",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_batch_entries_fetched_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50 entries"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_batch_entries_fetched_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95 entries"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 35 },
+      "id": 13
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Top 10 Active CT Logs",
+      "description": "CT logs producing the most entries per second",
+      "type": "bargauge",
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "continuous-blues" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (log) (rate(ct_certs_processed_by_log_total{job=~\"$collector_job\"}[$__rate_interval])))",
+          "legendFormat": "{{log}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 35 },
+      "id": 14
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 },
+      "id": 206,
+      "title": "💾 Database Transparency",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Rate",
+      "description": "Certificates written to the database per second (collector side)",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_writes_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "writes/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 44 },
+      "id": 30
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Errors / sec",
+      "description": "Failed database write operations per second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_write_errors_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 44 },
+      "id": 31
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Error %",
+      "description": "Percentage of failed writes out of total writes",
+      "type": "gauge",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_write_errors_total{job=~\"$collector_job\"}[$__rate_interval])) / clamp_min(sum(rate(ct_db_writes_total{job=~\"$collector_job\"}[$__rate_interval])), 1)",
+          "legendFormat": "error rate"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 44 },
+      "id": 32
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard DB Queries / sec",
+      "description": "Database read queries from the dashboard service",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_db_queries_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "queries/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 44 },
+      "id": 33
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard DB Query Errors / sec",
+      "description": "Failed dashboard database queries per second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_db_query_errors_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 44 },
+      "id": 34
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Total Writes",
+      "description": "Cumulative certificate writes since last restart",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_db_writes_total{job=~\"$collector_job\"})",
+          "legendFormat": "total writes"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 44 },
+      "id": 35
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Writes & Errors Over Time (Collector)",
+      "description": "Database write throughput and error rate from collectors",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "writes/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "errors/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_db_writes_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "writes/s"
+        },
+        {
+          "expr": "sum(rate(ct_db_write_errors_total{job=~\"$collector_job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 48 },
+      "id": 36
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Write Latency (Collector p50 / p95 / p99)",
+      "description": "Time to write a single certificate to the database",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$collector_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 48 },
+      "id": 37
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard DB Query Latency (p50 / p95 / p99)",
+      "description": "Time spent on dashboard-side database read queries",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_dashboard_db_query_duration_seconds_bucket{job=~\"$dashboard_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_dashboard_db_query_duration_seconds_bucket{job=~\"$dashboard_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_dashboard_db_query_duration_seconds_bucket{job=~\"$dashboard_job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 48 },
+      "id": 38
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Connection Pool Size (per Collector)",
+      "description": "Connection pool size per collector replica",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 3 },
+              { "color": "red", "value": 4 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "ct_db_pool_size{job=~\"$collector_job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 56 },
+      "id": 39
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Availability (per Collector)",
+      "description": "Whether each collector replica has a live database connection",
+      "type": "state-timeline",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "options": { "mergeValues": true, "showValue": "auto", "alignValue": "center" },
+      "targets": [
+        {
+          "expr": "ct_db_available{job=~\"$collector_job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 56 },
+      "id": 40
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard DB Queries by Endpoint",
+      "description": "Which dashboard endpoints are querying the database",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2, "stacking": { "mode": "normal" } } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (rate(ct_dashboard_db_queries_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 56 },
+      "id": 41
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 64 },
+      "id": 205,
+      "title": "📊 Dashboard Service",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard HTTP req/s",
+      "description": "Dashboard HTTP request rate over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_http_requests_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "total req/s"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 65 },
+      "id": 15
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Dashboard DB Queries/s",
+      "description": "Database query rate from the dashboard",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_db_queries_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "queries/s"
+        },
+        {
+          "expr": "sum(rate(ct_dashboard_db_query_errors_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 65 },
+      "id": 16
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Cert Buffer & SocketIO Events",
+      "description": "Real-time subsystem health",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "cert buffer" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "left" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "events/s" },
+            "properties": [
+              { "id": "unit", "value": "ops" },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "ct_dashboard_cert_buffer_size{job=~\"$dashboard_job\"}",
+          "legendFormat": "cert buffer"
+        },
+        {
+          "expr": "sum(rate(ct_dashboard_socketio_events_emitted_total{job=~\"$dashboard_job\"}[$__rate_interval]))",
+          "legendFormat": "events/s"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 65 },
+      "id": 17
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["certstream", "overview"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "default", "value": "default" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "certstream-collector", "value": "certstream-collector" },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(ct_entries_processed_total, job)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "collector_job",
+        "query": "label_values(ct_entries_processed_total, job)",
+        "refresh": 2,
+        "type": "query",
+        "label": "Collector Job"
+      },
+      {
+        "current": { "selected": false, "text": "certstream-dashboard", "value": "certstream-dashboard" },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(ct_dashboard_http_requests_total, job)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "dashboard_job",
+        "query": "label_values(ct_dashboard_http_requests_total, job)",
+        "refresh": 2,
+        "type": "query",
+        "label": "Dashboard Job"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CertStream Overview",
+  "uid": "certstream-overview",
+  "version": 1
+}

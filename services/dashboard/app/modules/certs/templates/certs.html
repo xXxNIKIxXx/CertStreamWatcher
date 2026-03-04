@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Live Certificates – CertStream Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Live Certificates</h4>
+  <div class="d-flex align-items-center gap-2">
+    <span class="badge text-bg-primary" id="cert-count">0</span>
+    <button class="btn btn-sm btn-outline-secondary" id="pause-btn" onclick="togglePause()">
+      <i class="bi bi-pause-fill"></i> Pause
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="clearTable()">
+      <i class="bi bi-trash"></i> Clear
+    </button>
+  </div>
+</div>
+
+<div class="mb-3" style="max-width:400px">
+  <input type="text" class="form-control form-control-sm" id="filter-input"
+         placeholder="Filter by domain, issuer, subject…" oninput="applyFilter()">
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th style="width:140px">Time</th>
+          <th>Subject / CN</th>
+          <th>DNS Names</th>
+          <th>Issuer</th>
+          <th>Valid From</th>
+          <th>Valid To</th>
+          <th style="width:110px">Fingerprint</th>
+        </tr>
+      </thead>
+      <tbody id="cert-tbody"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.js" integrity="sha512-8BHxHDLsOHx+flIrQ0DrZcea7MkHqRU5GbTHmbdzMRnAaoCIkZ97PqZcXJkKZckMMhqfoeaJE+DNUVuyoQsO3Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+const MAX_ROWS = 500;
+let paused = false;
+let filterText = '';
+
+const socket = io({ transports: ['websocket'] });
+const tbody = document.getElementById('cert-tbody');
+const countBadge = document.getElementById('cert-count');
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pause-btn');
+  btn.innerHTML = paused
+    ? '<i class="bi bi-play-fill"></i> Resume'
+    : '<i class="bi bi-pause-fill"></i> Pause';
+}
+
+function clearTable() {
+  tbody.innerHTML = '';
+  countBadge.textContent = '0';
+}
+
+function applyFilter() {
+  filterText = document.getElementById('filter-input').value.toLowerCase();
+  for (const row of tbody.rows) {
+    row.style.display = row.textContent.toLowerCase().includes(filterText) ? '' : 'none';
+  }
+}
+
+function short(s, n) {
+  if (!s) return '–';
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function addCert(cert) {
+  if (paused) return;
+
+  const tr = document.createElement('tr');
+  tr.className = 'cert-row';
+
+  const dns = (cert.dns_names || []).join(', ');
+  const fp = (cert.fingerprint_sha256 || '').slice(0, 16);
+  const ts = cert.timestamp
+    ? new Date(cert.timestamp).toLocaleTimeString()
+    : (cert.ts ? new Date(cert.ts).toLocaleTimeString() : '–');
+
+  tr.innerHTML = `
+    <td class="text-body-secondary small">${ts}</td>
+    <td><code>${short(cert.subject, 60)}</code></td>
+    <td class="small">${short(dns, 80)}</td>
+    <td class="text-body-secondary small">${short(cert.issuer, 60)}</td>
+    <td class="small">${cert.not_before ? cert.not_before.slice(0,10) : '–'}</td>
+    <td class="small">${cert.not_after ? cert.not_after.slice(0,10) : '–'}</td>
+    <td><code class="text-body-secondary small">${fp}</code></td>`;
+
+  if (filterText && !tr.textContent.toLowerCase().includes(filterText)) {
+    tr.style.display = 'none';
+  }
+
+  tbody.prepend(tr);
+
+  while (tbody.rows.length > MAX_ROWS) {
+    tbody.removeChild(tbody.lastChild);
+  }
+
+  countBadge.textContent = tbody.rows.length;
+}
+
+socket.on('cert_event', addCert);
+socket.on('connect_error', () => {
+  console.error('WebSocket connection failed');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td colspan="8" class="text-danger text-center small py-3">
+    <i class="bi bi-exclamation-triangle-fill"></i> Connection error. Live updates may be unavailable.
+  </td>`;
+  tbody.prepend(tr);
+});
+</script>
+{% endblock %}

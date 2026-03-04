@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Query – CertStream Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+  #sql-editor {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: .875rem;
+    min-height: 140px;
+    resize: vertical;
+    tab-size: 2;
+  }
+  .result-wrapper { max-height: 520px; overflow: auto; }
+  .result-wrapper th { position: sticky; top: 0; z-index: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h4 class="mb-4">Query Database</h4>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-9">
+    <textarea id="sql-editor" class="form-control"
+              placeholder="SELECT * FROM ct_certs LIMIT 10;">SELECT subject, issuer, dns_names, not_before, not_after, ts
+FROM ct_certs
+ORDER BY ts DESC
+LIMIT 50;</textarea>
+  </div>
+  <div class="col-lg-3">
+    <div class="card h-100">
+      <div class="card-header py-2"><small class="fw-semibold">Examples</small></div>
+      <div class="list-group list-group-flush">
+        {% for ex in examples %}
+        <button class="list-group-item list-group-item-action py-2 small"
+                onclick="loadExample({{ loop.index0 }})">{{ ex.label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mb-3">
+  <button class="btn btn-primary btn-sm" onclick="runQuery()">
+    <i class="bi bi-play-fill"></i> Run <kbd class="ms-1 bg-white bg-opacity-25">Ctrl+Enter</kbd>
+  </button>
+  <span id="query-status" class="text-body-secondary small ms-2"></span>
+</div>
+
+<!-- Results -->
+<div class="card" id="results-card" style="display:none">
+  <div class="card-header d-flex justify-content-between align-items-center py-2">
+    <small class="fw-semibold">Results</small>
+    <small class="text-body-secondary" id="result-meta"></small>
+  </div>
+  <div class="result-wrapper">
+    <table class="table table-sm table-striped table-hover mb-0">
+      <thead id="result-thead"></thead>
+      <tbody id="result-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="alert alert-danger mt-3 py-2" id="query-error" style="display:none"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const examples = {{ examples | tojson }};
+
+function loadExample(idx) {
+  document.getElementById('sql-editor').value = examples[idx].sql;
+}
+
+function runQuery() {
+  const sql = document.getElementById('sql-editor').value.trim();
+  if (!sql) return;
+
+  const status = document.getElementById('query-status');
+  const errBox = document.getElementById('query-error');
+  const card = document.getElementById('results-card');
+  status.textContent = 'Running…';
+  errBox.style.display = 'none';
+  card.style.display = 'none';
+
+  fetch('/query/api/execute', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({sql}),
+  })
+  .then(async r => {
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      errBox.textContent = data.error || 'Unknown error';
+      errBox.style.display = '';
+      status.textContent = '';
+      return;
+    }
+    renderResults(data);
+    status.textContent = '';
+  })
+  .catch(err => {
+    errBox.textContent = err.toString();
+    errBox.style.display = '';
+    status.textContent = '';
+  });
+}
+
+function renderResults(data) {
+  const card = document.getElementById('results-card');
+  const thead = document.getElementById('result-thead');
+  const tbody = document.getElementById('result-tbody');
+  const meta = document.getElementById('result-meta');
+
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+
+  if (!data.columns || data.columns.length === 0) {
+    meta.textContent = data.message || 'No results';
+    card.style.display = '';
+    return;
+  }
+
+  const headRow = document.createElement('tr');
+  data.columns.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+
+  data.rows.forEach(row => {
+    const tr = document.createElement('tr');
+    row.forEach(cell => {
+      const td = document.createElement('td');
+      td.className = 'small';
+      if (cell === null) {
+        td.innerHTML = '<span class="text-body-secondary">NULL</span>';
+      } else if (typeof cell === 'object') {
+        td.textContent = JSON.stringify(cell);
+      } else {
+        td.textContent = cell;
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  let info = data.row_count + ' row(s) in ' + data.elapsed_s + 's';
+  if (data.truncated) info += ' (truncated)';
+  meta.textContent = info;
+  card.style.display = '';
+}
+
+document.getElementById('sql-editor').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runQuery();
+  }
+});
+</script>
+{% endblock %}

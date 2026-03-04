@@ -1,0 +1,400 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 2,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": ["certstream"],
+      "targetBlank": false,
+      "title": "CertStream Dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "📊 HTTP Request Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Requests / sec",
+      "description": "Total HTTP request rate across all API replicas",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_api_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "req/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Error Rate (5xx)",
+      "description": "Percentage of 5xx responses",
+      "type": "gauge",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_api_http_requests_total{job=~\"$job\", status=~\"5..\"}[$__rate_interval])) / clamp_min(sum(rate(ct_api_http_requests_total{job=~\"$job\"}[$__rate_interval])), 1)",
+          "legendFormat": "5xx rate"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Requests In Progress",
+      "description": "Currently in-flight requests across all replicas",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }, { "color": "orange", "value": 20 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_api_http_requests_in_progress{job=~\"$job\"})",
+          "legendFormat": "in-flight"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Database",
+      "description": "Whether the API can reach the database",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(ct_api_db_available{job=~\"$job\"})",
+          "legendFormat": "DB"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Pool Size",
+      "description": "Connection pool size across API replicas",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_api_db_pool_size{job=~\"$job\"})",
+          "legendFormat": "pool"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "P50 / P95 / P99 Latency",
+      "description": "Request latency percentiles",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 2 }] }
+        }
+      },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p99" }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "📈 Request Rate & Latency",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Request Rate by Status Code",
+      "description": "HTTP request rate broken down by status code",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(ct_api_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 10
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Latency Percentiles",
+      "description": "p50, p90, p95, p99 request latencies over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }
+      },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.90, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p90" },
+        { "expr": "histogram_quantile(0.95, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))", "legendFormat": "p99" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 11
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "title": "📡 Request Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Request Rate by Endpoint",
+      "description": "Per-endpoint request rates",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "bars", "fillOpacity": 50, "stacking": { "mode": "normal" } } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (rate(ct_api_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 20
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Response Size (p95)",
+      "description": "95th percentile response body size per endpoint",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "decbytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (endpoint, le) (rate(ct_api_http_response_size_bytes_bucket{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 21
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 103,
+      "title": "🗄️ Database Queries",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Rate by Endpoint",
+      "description": "Database read queries per second",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 15 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (rate(ct_api_db_queries_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 30
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Latency (p95)",
+      "description": "95th percentile database query duration",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (endpoint, le) (rate(ct_api_db_query_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 31
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Errors / sec",
+      "description": "Failed database queries per second",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 15 },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (rate(ct_api_db_query_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "id": 32
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Connection Pool",
+      "description": "Connection pool size per replica",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "ct_api_db_pool_size{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "id": 33
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
+      "id": 104,
+      "title": "⚡ Per-Replica Breakdown",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Request Rate by Replica",
+      "description": "Request rate per API instance for load-balancing visibility",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (instance) (rate(ct_api_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "id": 40
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Latency by Replica (p95)",
+      "description": "p95 latency per instance to identify hot replicas",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (instance, le) (rate(ct_api_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "id": 41
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["certstream", "api"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "default", "value": "default" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "certstream-api", "value": "certstream-api" },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(ct_api_http_requests_total, job)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "job",
+        "query": "label_values(ct_api_http_requests_total, job)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CertStream API",
+  "uid": "certstream-api",
+  "version": 1
+}

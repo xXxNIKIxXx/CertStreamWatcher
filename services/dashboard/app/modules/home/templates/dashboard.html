@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Overview – CertStream Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="mb-0">Overview</h4>
+  <small class="text-body-secondary">Next refresh in <strong id="countdown">15</strong>s</small>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4" id="overview-cards">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">Total Certificates</h6>
+        <p class="fs-3 fw-semibold mb-0" id="stat-total">–</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">Last 24 h</h6>
+        <p class="fs-3 fw-semibold mb-0" id="stat-24h">–</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">Unique Issuers</h6>
+        <p class="fs-3 fw-semibold mb-0" id="stat-issuers">–</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-subtitle text-body-secondary mb-2">Database</h6>
+        <p class="fs-5 fw-semibold mb-0" id="stat-db">
+          <span class="dot dot-mute"></span> <span class="text-body-secondary">Checking</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick links -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <a href="/certs" class="card text-decoration-none h-100">
+      <div class="card-body">
+        <i class="bi bi-file-earmark-lock text-primary me-2"></i>
+        <strong>Live Certificates</strong>
+        <p class="text-body-secondary small mb-0 mt-1">Real-time certificate stream</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="/query" class="card text-decoration-none h-100">
+      <div class="card-body">
+        <i class="bi bi-terminal text-primary me-2"></i>
+        <strong>Query Database</strong>
+        <p class="text-body-secondary small mb-0 mt-1">Run SQL against TimescaleDB</p>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="/monitoring" class="card text-decoration-none h-100">
+      <div class="card-body">
+        <i class="bi bi-heart-pulse text-primary me-2"></i>
+        <strong>System Health</strong>
+        <p class="text-body-secondary small mb-0 mt-1">Redis, DB &amp; collector status</p>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Recent certs -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Recent Certificates</span>
+    <a href="/certs" class="btn btn-sm btn-outline-primary">View all</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Time</th><th>Subject</th><th>Issuer</th><th>DNS Names</th>
+        </tr>
+      </thead>
+      <tbody id="recent-certs">
+        <tr><td colspan="4" class="text-body-secondary text-center">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadOverview() {
+  fetch('/api/overview')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('stat-total').textContent =
+        Number(data.total_certs).toLocaleString();
+      document.getElementById('stat-24h').textContent =
+        Number(data.certs_24h).toLocaleString();
+      document.getElementById('stat-issuers').textContent =
+        Number(data.unique_issuers).toLocaleString();
+      const dbEl = document.getElementById('stat-db');
+      if (data.db_ok) {
+        dbEl.innerHTML = '<span class="dot dot-ok"></span> Connected';
+      } else {
+        dbEl.innerHTML = '<span class="dot dot-err"></span> Error';
+      }
+    })
+    .catch(() => {
+      document.getElementById('stat-db').innerHTML =
+        '<span class="dot dot-err"></span> Offline';
+    });
+}
+
+function loadRecent() {
+  fetch('/certs/api/recent?limit=10')
+    .then(r => r.json())
+    .then(data => {
+      const tbody = document.getElementById('recent-certs');
+      tbody.innerHTML = '';
+      (data.certs || []).forEach(c => {
+        const tr = document.createElement('tr');
+        const ts = c.timestamp || c.ts || '';
+        const tStr = ts ? new Date(ts).toLocaleTimeString() : '–';
+        const dns = (c.dns_names || []);
+        const dnsStr = typeof dns === 'string' ? dns : dns.join(', ');
+        tr.innerHTML = `
+          <td class="text-body-secondary small">${tStr}</td>
+          <td><code>${(c.subject||'–').slice(0,60)}</code></td>
+          <td class="text-body-secondary small">${(c.issuer||'–').slice(0,50)}</td>
+          <td class="small">${dnsStr.slice(0,80)}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (!data.certs || data.certs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-body-secondary text-center">No certificates yet</td></tr>';
+      }
+    })
+    .catch(() => {});
+}
+
+loadOverview();
+loadRecent();
+
+const INTERVAL = 15;
+let remaining = INTERVAL;
+let tickCount = 0;
+const countdownEl = document.getElementById('countdown');
+
+setInterval(() => {
+  remaining--;
+  if (remaining <= 0) {
+    tickCount++;
+    loadRecent();
+    if (tickCount % 2 === 0) loadOverview();   // every 30 s
+    remaining = INTERVAL;
+  }
+  countdownEl.textContent = remaining;
+}, 1000);
+</script>
+{% endblock %}

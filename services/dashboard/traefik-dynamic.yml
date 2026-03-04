@@ -1,0 +1,31 @@
+## Dynamic configuration — Traefik file provider
+## Routes traffic to the "web" service via Docker's internal DNS.
+## No sticky sessions needed: Socket.IO uses websocket-only transport
+## (single persistent connection) and Redis syncs events across replicas.
+
+http:
+  routers:
+    api:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - api
+      service: api
+
+    dashboard:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - web
+      service: dashboard
+
+  services:
+    api:
+      loadBalancer:
+        servers:
+          - url: "http://api:8080"
+        passHostHeader: true
+
+    dashboard:
+      loadBalancer:
+        servers:
+          - url: "http://web:5000"
+        passHostHeader: true

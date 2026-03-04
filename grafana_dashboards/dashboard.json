@@ -1,0 +1,458 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": ["certstream"],
+      "targetBlank": false,
+      "title": "CertStream Dashboards",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "📊 HTTP Request Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Requests / sec",
+      "description": "Total HTTP request rate across all dashboard replicas",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "req/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Error Rate (5xx)",
+      "description": "Percentage of requests returning 5xx status",
+      "type": "gauge",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_http_requests_total{job=~\"$job\", status=~\"5..\"}[$__rate_interval])) / clamp_min(sum(rate(ct_dashboard_http_requests_total{job=~\"$job\"}[$__rate_interval])), 1)",
+          "legendFormat": "5xx rate"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Requests In Progress",
+      "description": "Currently being handled concurrently",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }, { "color": "orange", "value": 10 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(ct_dashboard_http_requests_in_progress{job=~\"$job\"})",
+          "legendFormat": "in-flight"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Redis Subscriber",
+      "description": "Whether the background Redis cert subscriber thread is alive",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "ct_dashboard_redis_subscriber_up{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Cert Buffer Size",
+      "description": "Number of certs held in the in-memory ring buffer",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 800 }, { "color": "red", "value": 950 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "ct_dashboard_cert_buffer_size{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "SocketIO Events / sec",
+      "description": "Rate of events emitted to SocketIO clients",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_socketio_events_emitted_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "events/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Request Rate by Status Code",
+      "description": "HTTP requests broken down by status code over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "2.." }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "3.." }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "4.." }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byRegexp", "options": "5.." }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(ct_dashboard_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "id": 7
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Request Rate by Endpoint",
+      "description": "Which Flask endpoints receive the most traffic",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2, "stacking": { "mode": "normal" } } }
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (endpoint) (rate(ct_dashboard_http_requests_total{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "id": 8
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "id": 101,
+      "title": "⏱️ Request Latency",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Overall Latency (p50 / p95 / p99)",
+      "description": "HTTP request latency percentiles across all endpoints",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 9
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Latency by Endpoint (p95)",
+      "description": "95th percentile latency per Flask endpoint",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(ct_dashboard_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 10
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Response Size (p50 / p95)",
+      "description": "HTTP response body sizes over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ct_dashboard_http_response_size_bytes_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ct_dashboard_http_response_size_bytes_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "id": 11
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "id": 102,
+      "title": "💾 Database Queries (Dashboard Reads)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Queries / sec",
+      "description": "Rate of database queries from dashboard endpoints",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_db_queries_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "queries/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 31 },
+      "id": 12
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Errors / sec",
+      "description": "Rate of failed database queries",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_db_query_errors_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 31 },
+      "id": 13
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Error Rate %",
+      "description": "Percentage of failed queries out of total",
+      "type": "gauge",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0, "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ct_dashboard_db_query_errors_total{job=~\"$job\"}[$__rate_interval])) / clamp_min(sum(rate(ct_dashboard_db_queries_total{job=~\"$job\"}[$__rate_interval])), 1)",
+          "legendFormat": "error rate"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 31 },
+      "id": 14
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Rate by Endpoint",
+      "description": "Which dashboard endpoints query the database most often",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2, "stacking": { "mode": "normal" } } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (rate(ct_dashboard_db_queries_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "id": 15
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "DB Query Duration by Endpoint (p95)",
+      "description": "95th percentile query latency per dashboard endpoint",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(ct_dashboard_db_query_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "id": 16
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 43 },
+      "id": 103,
+      "title": "🔌 SocketIO & Real-Time",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "SocketIO Events by Type",
+      "description": "Which SocketIO events are being emitted over time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+      },
+      "targets": [
+        {
+          "expr": "sum by (event) (rate(ct_dashboard_socketio_events_emitted_total{job=~\"$job\"}[$__rate_interval]))",
+          "legendFormat": "{{event}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "id": 17
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "title": "Cert Buffer Size Over Time",
+      "description": "In-memory ring buffer usage for recent certificates",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 15, "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 800 },
+              { "color": "red", "value": 950 }
+            ]
+          },
+          "max": 1000
+        }
+      },
+      "targets": [
+        {
+          "expr": "ct_dashboard_cert_buffer_size{job=~\"$job\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "id": 18
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["certstream", "dashboard"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "default", "value": "default" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "certstream-dashboard", "value": "certstream-dashboard" },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(ct_dashboard_http_requests_total, job)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "job",
+        "query": "label_values(ct_dashboard_http_requests_total, job)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CertStream Dashboard",
+  "uid": "certstream-dashboard",
+  "version": 1
+}
