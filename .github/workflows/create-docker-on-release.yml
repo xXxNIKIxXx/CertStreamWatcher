@@ -9,13 +9,25 @@ env:
   ORG_NAME: ${{ github.repository_owner }}
 
 jobs:
-  build-and-push-image:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
-
+    strategy:
+      matrix:
+        service: [api, dashboard, collector]
+        include:
+          - service: api
+            image_name: certstream-api
+            context: ./services/api
+          - service: dashboard
+            image_name: certstream-web
+            context: ./services/dashboard
+          - service: collector
+            image_name: certstream-collector
+            context: ./services/collector
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -35,35 +47,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (tags & labels)
-        id: meta
-        uses: docker/metadata-action@v3
-        with:
-          images: ${{ env.GHCR_REGISTRY }}/${{ env.ORG_NAME }}/stammtools
-          tags: |
-            type=ref,event=tag
-            type=semver,pattern={{major}}.{{minor}}
-          labels: |
-            org.opencontainers.image.created={{timestamp}}
-            org.opencontainers.image.version={{ref}}
-            org.opencontainers.image.revision={{sha}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Build and Push Docker Image (multi-arch)
+      - name: Build and Push ${{ matrix.service }} Image (multi-arch)
         uses: docker/build-push-action@v4
         with:
-          context: .
+          context: ${{ matrix.context }}
           push: true
-          # build for multiple platforms (x86_64, arm64, armv7 for Raspberry Pi)
-          platforms: linux/arm64,linux/arm/v7
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Use GitHub Actions cache for build layers and also push a registry cache
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          tags: ${{ env.GHCR_REGISTRY }}/${{ env.ORG_NAME }}/${{ matrix.image_name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            PIP_CACHE_DIR=/root/.cache/pip
-
-          # Optionally also use a registry cache image (works with GHCR)
-          # cache-from: type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.ORG_NAME }}/chordbook:cache
-          # cache-to: type=registry,ref=${{ env.GHCR_REGISTRY }}/${{ env.ORG_NAME }}/chordbook:cache,mode=max
