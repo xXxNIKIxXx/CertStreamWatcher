@@ -85,6 +85,7 @@ ORDER BY (key, ts)
 
     def __init__(self, metrics=None) -> None:
         self._client = None
+        self._client_params = None
         self._metrics = metrics
         self._buffer: List[list] = []
         self._lock = asyncio.Lock()
@@ -104,6 +105,8 @@ ORDER BY (key, ts)
 
         try:
             params = _parse_clickhouse_dsn(DB_DSN)
+            # keep params so synchronous helper methods can create transient clients
+            self._client_params = params
             client = clickhouse_connect.get_client(**params)
             await asyncio.to_thread(client.command, self.CREATE_TABLE_SQL)
             await asyncio.to_thread(client.command, self.CREATE_SETTINGS_SQL)
@@ -230,15 +233,31 @@ ORDER BY (key, ts)
         This method is intentionally synchronous since callers may call it
         from non-async code paths.
         """
-        if not self._client:
+        if not self._client and not self._client_params:
             return
         try:
-            # clickhouse-connect supports insert with column names
-            self._client.insert(
-                "ct_settings",
-                [[key, value]],
-                column_names=["key", "value"],
-            )
+            # Use a transient client for synchronous helper calls to avoid
+            # concurrent-session errors from clickhouse-connect when the
+            # shared async client is used elsewhere.
+            if self._client:
+                self._client.insert(
+                    "ct_settings",
+                    [[key, value]],
+                    column_names=["key", "value"],
+                )
+            else:
+                temp = clickhouse_connect.get_client(**self._client_params)
+                try:
+                    temp.insert(
+                        "ct_settings",
+                        [[key, value]],
+                        column_names=["key", "value"],
+                    )
+                finally:
+                    try:
+                        temp.close()
+                    except Exception:
+                        pass
             if self._metrics:
                 self._metrics.db_writes_total.inc()
         except Exception:
@@ -249,17 +268,39 @@ ORDER BY (key, ts)
 
         This executes a synchronous query on the underlying client.
         """
-        if not self._client:
+        if not self._client and not self._client_params:
             return None
+        client = None
         try:
-            rows = self._client.query(
-                f"SELECT value FROM ct_settings WHERE key = '{key}' ORDER BY ts DESC LIMIT 1"
-            )
-            # clickhouse-connect returns list of dict-like rows
-            if rows and len(rows) > 0:
-                return rows[0]["value"]
+            if self._client:
+                rows = self._client.query(
+                    f"SELECT value FROM ct_settings WHERE key = '{key}' ORDER BY ts DESC LIMIT 1"
+                )
+            else:
+                client = clickhouse_connect.get_client(**self._client_params)
+                rows = client.query(
+                    f"SELECT value FROM ct_settings WHERE key = '{key}' ORDER BY ts DESC LIMIT 1"
+                )
+
+            # clickhouse-connect returns a QueryResult object; make it safe
+            # to index by converting to a list of rows when possible.
+            try:
+                items = list(rows)
+            except TypeError:
+                # Fallback to common attributes on QueryResult
+                items = getattr(rows, "result_rows", None) or getattr(rows, "rows", None) or []
+
+            if items and len(items) > 0:
+                # rows are dict-like
+                return items[0].get("value")
         except Exception:
             logger.exception("Failed to query latest setting %s", key)
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
         return None
     # Helpers
     # ------------------------------------------------------------------
