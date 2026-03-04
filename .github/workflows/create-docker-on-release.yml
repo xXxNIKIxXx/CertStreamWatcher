@@ -21,13 +21,16 @@ jobs:
         include:
           - service: api
             image_name: certstream-api
-            context: ./services/api
+            context: .
+            file: services/api/Dockerfile
           - service: dashboard
             image_name: certstream-web
-            context: ./services/dashboard
+            context: .
+            file: services/dashboard/Dockerfile
           - service: collector
             image_name: certstream-collector
-            context: ./services/collector
+            context: .
+            file: services/collector/Dockerfile
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -59,6 +62,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           tags: ${{ env.GHCR_REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.image_name }}:latest
