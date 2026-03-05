@@ -6,6 +6,7 @@ import asyncio
 import base64
 import os
 import time
+import socket
 from typing import Dict, List
 from urllib.parse import urlparse
 
@@ -132,6 +133,13 @@ class CTLogPoller:
     ) -> bool:
         """Poll one batch from a CT log.  Returns True when entries were found."""
         sth = await self._fetch_json(session, f"{log_url}/ct/v1/get-sth")
+        # If STH fetch failed (transient network error), _fetch_json
+        # will return an empty dict. Treat that as no work and retry
+        # on the next polling cycle instead of crashing.
+        if not sth or "tree_size" not in sth:
+            logger.warning("Invalid or missing STH from %s; will retry", log_url)
+            return False
+
         tree_size = sth.get("tree_size")
 
         last_index = self._log_states.get(log_url, 0)
@@ -263,31 +271,71 @@ class CTLogPoller:
 
     async def _fetch_json(self, session: aiohttp.ClientSession, url: str) -> dict:
         t0 = time.monotonic()
-        try:
-            async with session.get(url) as resp:
+        # Retry on transient network/DNS/connectivity errors so the
+        # whole process doesn't crash on temporary outages.
+        max_attempts = int(os.getenv("HTTP_RETRIES", "5"))
+        backoff_base = float(os.getenv("HTTP_RETRY_BACKOFF", "1.0"))
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with session.get(url) as resp:
+                    elapsed = time.monotonic() - t0
+                    status = str(resp.status)
+                    try:
+                        self._metrics.http_requests_total.labels(
+                            method="GET", status=status
+                        ).inc()
+                        self._metrics.http_request_duration_seconds.observe(elapsed)
+                    except Exception:
+                        pass
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    return data
+            except (
+                aiohttp.ClientConnectorError,
+                aiohttp.client_exceptions.ClientConnectorDNSError,
+                socket.gaierror,
+                asyncio.TimeoutError,
+            ) as exc:
                 elapsed = time.monotonic() - t0
-                status = str(resp.status)
                 try:
                     self._metrics.http_requests_total.labels(
-                        method="GET", status=status
+                        method="GET", status="error"
                     ).inc()
                     self._metrics.http_request_duration_seconds.observe(elapsed)
                 except Exception:
                     pass
-                resp.raise_for_status()
-                data = await resp.json()
-                return data
-        except Exception as exc:
-            elapsed = time.monotonic() - t0
-            try:
-                self._metrics.http_requests_total.labels(
-                    method="GET", status="error"
-                ).inc()
-                self._metrics.http_request_duration_seconds.observe(elapsed)
-            except Exception:
-                pass
-            logger.exception("Failed to fetch URL %s: %s", url, exc)
-            raise
+                logger.warning(
+                    "Transient network error fetching %s (attempt %d/%d): %s",
+                    url,
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                if attempt == max_attempts:
+                    logger.exception(
+                        "Failed to fetch URL %s after %d attempts: %s",
+                        url,
+                        max_attempts,
+                        exc,
+                    )
+                    # Return empty dict to let callers handle retrying
+                    # at a higher level without raising an exception.
+                    return {}
+                # Exponential backoff before next attempt
+                await asyncio.sleep(backoff_base * (2 ** (attempt - 1)))
+                continue
+            except Exception as exc:
+                elapsed = time.monotonic() - t0
+                try:
+                    self._metrics.http_requests_total.labels(
+                        method="GET", status="error"
+                    ).inc()
+                    self._metrics.http_request_duration_seconds.observe(elapsed)
+                except Exception:
+                    pass
+                logger.exception("Failed to fetch URL %s: %s", url, exc)
+                return {}
 
     @staticmethod
     def _partition_logs(logs: List[str]) -> List[str]:
