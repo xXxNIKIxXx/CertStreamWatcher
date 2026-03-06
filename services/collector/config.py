@@ -29,6 +29,11 @@ def get_logger(name: str) -> logging.Logger:
     """Create and configure a logger with a standard format."""
     log = logging.getLogger(name)
     log.setLevel(logging.INFO)
+    # Prevent messages from being propagated to the root logger which
+    # can cause duplicate output when both the named logger and the
+    # root logger have handlers attached.
+    log.propagate = False
+
     if not log.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(
