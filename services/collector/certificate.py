@@ -37,7 +37,7 @@ class CertificateParser:
         #   leaf_type   (1 byte)  offset 1
         #   timestamp   (8 bytes) offset 2
         #   entry_type  (2 bytes) offset 10
-        #   [X509 entry]: cert_length (3 bytes, uint24) + cert DER
+        #   [X509 entry]: cert_length (3 bytes, uint24) + cert DERin the collectro please fixy the error were i get everythin printed 2 into the console 
         entry_type = int.from_bytes(leaf[10:12], "big")
 
         # If this is a standard X.509 entry, the cert length is encoded
