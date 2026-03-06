@@ -1,4 +1,10 @@
-"""WebSocket server for broadcasting certificate events."""
+"""Lightweight WebSocket server used to broadcast parsed certificate events.
+
+The `WebSocketServer` is intentionally minimal: it tracks connected
+clients and provides a `broadcast` helper which records simple metrics
+about broadcasts. Connection lifecycle is handled by `websockets` and
+clients are removed from the internal set when disconnected.
+"""
 
 from __future__ import annotations
 
@@ -56,6 +62,38 @@ class WebSocketServer:
         self._metrics.ws_broadcast_duration_seconds.observe(
             time.monotonic() - t0
         )
+        self._update_gauge()
+
+    async def broadcast_batch(self, messages: list[dict]) -> None:
+        """Send multiple messages to all connected clients in sequence.
+
+        This method mirrors the Redis publisher's `publish_batch` and is
+        used by the poller to push batches of parsed certificates. It
+        sends each message individually to every connected client.
+        """
+        if not self._clients or not messages:
+            return
+
+        if self._metrics:
+            self._metrics.ws_broadcasts_total.inc(len(messages))
+        t0 = time.monotonic()
+
+        dead: set = set()
+        for ws in list(self._clients):
+            try:
+                for msg in messages:
+                    await ws.send(json.dumps(msg))
+            except Exception as exc:
+                logger.exception("Failed to send batch to client: %s", exc)
+                if self._metrics:
+                    self._metrics.ws_broadcast_errors_total.inc()
+                dead.add(ws)
+
+        for ws in dead:
+            self._clients.discard(ws)
+
+        if self._metrics:
+            self._metrics.ws_broadcast_duration_seconds.observe(time.monotonic() - t0)
         self._update_gauge()
 
     # ------------------------------------------------------------------

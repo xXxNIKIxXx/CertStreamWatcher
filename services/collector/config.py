@@ -4,7 +4,11 @@ import os
 import logging
 
 LOG_LIST_URL = "https://www.gstatic.com/ct/log_list/v3/log_list.json"
-BATCH_SIZE = 500
+# Tunable performance knobs (override via environment variables):
+# - CT_BATCH_SIZE: how many entries to fetch per get-entries request
+# - CT_POLL_INTERVAL: seconds to wait between poll cycles for idle logs
+# - CT_BACKFILL_DELAY: delay used when backfilling newly discovered logs
+BATCH_SIZE = int(os.getenv("CT_BATCH_SIZE", "500"))
 POLL_INTERVAL = 2
 BACKFILL_DELAY = 2
 WEBSOCKET_PORT = 8765

@@ -1,4 +1,10 @@
-"""Prometheus metrics definitions and no-op fallbacks."""
+"""Prometheus metrics definitions used by the CT collector.
+
+This module provides a thin wrapper around `prometheus_client` so the
+collector can run even when the library is not installed. When the
+library is missing, no-op metrics are registered so callers can emit
+metrics without guard logic.
+"""
 
 from .config import get_logger, PROMETHEUS_PORT
 
@@ -47,7 +53,13 @@ class _NoopMetric:
 
 
 class MetricsManager:
-    """Encapsulates all Prometheus metrics used by the collector."""
+    """Encapsulates Prometheus metrics used by the collector.
+
+    The manager registers counters, gauges and histograms used across
+    the collector. Pass a single `MetricsManager` instance into
+    subsystems and call the metric methods directly (they are no-ops
+    when `prometheus_client` is not available).
+    """
 
     def __init__(self) -> None:
         self._noop = _NoopMetric()
@@ -131,11 +143,7 @@ class MetricsManager:
             "Certificates successfully processed per CT log",
             ["log"],
         )
-        self.extraction_failures_by_log = Counter(
-            "ct_extraction_failures_by_log_total",
-            "Extraction failures per CT log",
-            ["log"],
-        )
+        # per-log extraction failures counter removed (unused)
         self.parse_failures_by_log = Counter(
             "ct_parse_failures_by_log_total",
             "Parse failures per CT log",
@@ -162,6 +170,11 @@ class MetricsManager:
             "ct_leaf_type_total",
             "MerkleTreeLeaf leaf_type distribution",
             ["leaf_type"],
+        )
+        self.entry_type = Counter(
+            "ct_entry_type_total",
+            "CT log entry_type distribution (0=x509,1=precert)",
+            ["entry_type"],
         )
         self.cert_version = Counter(
             "ct_certificate_version_total",
@@ -191,6 +204,10 @@ class MetricsManager:
         self.db_pool_size = Gauge(
             "ct_db_pool_size",
             "Current database connection pool size",
+        )
+        self.db_buffer_size = Gauge(
+            "ct_db_buffer_size",
+            "Number of rows currently buffered for DB insertion",
         )
         self.db_available = Gauge(
             "ct_db_available",
@@ -271,12 +288,13 @@ class MetricsManager:
         self.total_logs = self._noop
         self.parse_duration = self._noop
         self.certs_by_log = self._noop
-        self.extraction_failures_by_log = self._noop
+        # extraction_failures_by_log removed (unused)
         self.parse_failures_by_log = self._noop
         self.last_index = self._noop
         self.skipped_entry_type = self._noop
         self.leaf_version = self._noop
         self.leaf_type = self._noop
+        self.entry_type = self._noop
         self.cert_version = self._noop
         # DB
         self.db_writes_total = self._noop
@@ -284,6 +302,7 @@ class MetricsManager:
         self.db_write_duration_seconds = self._noop
         self.db_batch_size = self._noop
         self.db_pool_size = self._noop
+        self.db_buffer_size = self._noop
         self.db_available = self._noop
         # Redis
         self.redis_publishes_total = self._noop

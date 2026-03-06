@@ -91,6 +91,12 @@ class CertStreamService:
         # start settings subscriber (will no-op if Redis not configured)
         await self.settings_sub.init()
 
+        # Start filter file watcher (if a filter file is mounted)
+        try:
+            await self.filter.start()
+        except Exception:
+            logger.exception("Failed to start filter file watcher")
+
         # Start background poller to fetch persisted settings periodically
         self._settings_task = asyncio.create_task(self._poll_settings_loop())
 

@@ -1,4 +1,11 @@
-"""CT log discovery and per-log polling loop."""
+"""CT log discovery and polling.
+
+This module discovers public CT logs and continuously polls each log
+for new entries. Polling is batched (controlled by `BATCH_SIZE`) and
+parses entries in a CPU-bound phase followed by batched I/O (DB/Redis).
+Configuration and tuning knobs are provided via environment variables
+to allow scaling and performance experimentation without code changes.
+"""
 
 from __future__ import annotations
 
@@ -178,8 +185,13 @@ class CTLogPoller:
                 self._metrics.leaf_type.labels(leaf_type=str(leaf_type)).inc()
             except Exception:
                 pass
+            try:
+                self._metrics.entry_type.labels(entry_type=str(entry_type)).inc()
+            except Exception:
+                pass
 
-            if entry_type != 0:
+            # Accept both X.509 (0) and Precertificate (1) entry types.
+            if entry_type not in (0, 1):
                 try:
                     self._metrics.skipped_entry_type.labels(
                         entry_type=str(entry_type)
@@ -189,16 +201,97 @@ class CTLogPoller:
                 continue
 
             # Single-pass extraction + parsing (no double DER decode)
-            try:
-                with self._metrics.parse_duration.time():
-                    cert = self._parser.extract_and_parse(leaf, log_url)
-            except Exception as exc:
-                logger.exception(
-                    "[%s] Parse error at index=%s: %s", log_url, idx, exc
-                )
-                cert = None
+            cert = None
+            # For Precertificate entries the DER may be present in the
+            # entry's `extra_data` field returned by the CT get-entries API.
+            # Prefer parsing that when available to correctly handle precerts.
+            if entry_type == 1 and entry.get("extra_data"):
+                try:
+                    extra_der = base64.b64decode(entry.get("extra_data"))
+                    # Per RFC6962 the PrecertChainEntry encodes ASN.1Cert
+                    # items as uint24 length-prefixed blobs. Try to extract
+                    # the first ASN.1Cert (the pre-certificate) and parse
+                    # only that slice to avoid parsing wrapper structures.
+                    candidate = None
+                    if len(extra_der) >= 3:
+                        try:
+                            cert_len = int.from_bytes(extra_der[0:3], "big")
+                            if 3 + cert_len <= len(extra_der):
+                                candidate = extra_der[3 : 3 + cert_len]
+                        except Exception:
+                            candidate = None
+
+                    to_try = candidate or extra_der
+                    with self._metrics.parse_duration.time():
+                        parsed = self._parser.parse(to_try, log_url)
+                    if parsed:
+                        # Attach RFC 6962 leaf metadata so downstream
+                        # systems know this came from a Precertificate entry.
+                        parsed["ct_entry_type"] = "precert"
+                        parsed["format"] = "der"
+                        parsed["ct_leaf_version"] = leaf_version
+                        parsed["ct_leaf_type"] = leaf_type
+                        parsed["ct_entry_type_numeric"] = entry_type
+                        try:
+                            parsed["ct_timestamp"] = int.from_bytes(
+                                leaf[2:10], "big"
+                            )
+                        except Exception:
+                            parsed["ct_timestamp"] = None
+                        parsed["ct_index"] = idx
+                        cert = parsed
+                except Exception as exc:
+                    # Debug: include traceback and a short excerpt of the data
+                    try:
+                        extra_preview = entry.get("extra_data")[:160]
+                    except Exception:
+                        extra_preview = None
+                    logger.debug(
+                        "[%s] Precert extra_data parse failed at index=%s: %s; extra_data_prefix=%s",
+                        log_url,
+                        idx,
+                        exc,
+                        extra_preview,
+                        exc_info=True,
+                    )
+
+            if cert is None:
+                try:
+                    with self._metrics.parse_duration.time():
+                        cert = self._parser.extract_and_parse(
+                            leaf, log_url, entry_type=entry_type
+                        )
+                except Exception as exc:
+                    # Keep the error-level log for visibility, but also emit a
+                    # debug log with full traceback and a short leaf preview
+                    try:
+                        leaf_preview = base64.b64encode(leaf)[:160].decode('ascii')
+                    except Exception:
+                        leaf_preview = None
+                    logger.exception(
+                        "[%s] Parse error at index=%s: %s", log_url, idx, exc
+                    )
+                    logger.debug(
+                        "[%s] Parse error details index=%s entry_type=%s leaf_prefix=%s",
+                        log_url,
+                        idx,
+                        entry_type,
+                        leaf_preview,
+                        exc_info=True,
+                    )
+                    cert = None
 
             if cert:
+                # Ensure leaf metadata exists on certs parsed via leaf
+                if "ct_leaf_version" not in cert:
+                    try:
+                        cert["ct_leaf_version"] = leaf_version
+                        cert["ct_leaf_type"] = leaf_type
+                        cert["ct_entry_type_numeric"] = entry_type
+                        cert["ct_timestamp"] = int.from_bytes(leaf[2:10], "big")
+                        cert["ct_index"] = idx
+                    except Exception:
+                        cert.setdefault("ct_timestamp", None)
                 parsed_certs.append(cert)
                 self._metrics.parse_successes.inc()
                 self._metrics.certs_by_log.labels(log=log_url).inc()
@@ -209,6 +302,8 @@ class CTLogPoller:
                 except Exception:
                     pass
             else:
+                # No cert parsed — record metric and emit debug context to aid
+                # investigation (no sensitive keys, only short previews).
                 self._metrics.parse_failures.inc()
                 try:
                     self._metrics.parse_failures_by_log.labels(
@@ -216,6 +311,18 @@ class CTLogPoller:
                     ).inc()
                 except Exception:
                     pass
+                try:
+                    leaf_preview = base64.b64encode(leaf)[:160].decode('ascii')
+                except Exception:
+                    leaf_preview = None
+                logger.debug(
+                    "[%s] Parsing returned no cert at index=%s entry_type=%s leaf_prefix=%s entry_keys=%s",
+                    log_url,
+                    idx,
+                    entry_type,
+                    leaf_preview,
+                    list(entry.keys()) if isinstance(entry, dict) else None,
+                )
 
         # ── Phase 2: Batched I/O ─────────────────────────────────────
         if parsed_certs:

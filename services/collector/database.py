@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS ct_certs (
     serial_number String,
     dns_names   Array(String),
     fingerprint_sha256 String,
+    ct_entry_type String,
+    format      String,
     ts          DateTime64(3, 'UTC') DEFAULT now64(3)
 )
 ENGINE = MergeTree()
@@ -81,6 +83,7 @@ ORDER BY (key, ts)
     _INSERT_COLUMNS = [
         "log", "subject", "issuer", "not_before", "not_after",
         "serial_number", "dns_names", "fingerprint_sha256",
+        "ct_entry_type", "format",
     ]
 
     def __init__(self, metrics=None) -> None:
@@ -110,6 +113,26 @@ ORDER BY (key, ts)
             client = clickhouse_connect.get_client(**params)
             await asyncio.to_thread(client.command, self.CREATE_TABLE_SQL)
             await asyncio.to_thread(client.command, self.CREATE_SETTINGS_SQL)
+            # Ensure new columns exist (for upgrades/migrations)
+            def _ensure_columns():
+                try:
+                    cols = client.query("SELECT name FROM system.columns WHERE table = 'ct_certs'")
+                    existing = {r[0] for r in list(cols)}
+                except Exception:
+                    existing = set()
+                # Add missing columns if necessary
+                alter_cmds = []
+                if 'ct_entry_type' not in existing:
+                    alter_cmds.append("ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS ct_entry_type String")
+                if 'format' not in existing:
+                    alter_cmds.append("ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS format String")
+                for cmd in alter_cmds:
+                    try:
+                        client.command(cmd)
+                    except Exception:
+                        pass
+
+            await asyncio.to_thread(_ensure_columns)
             self._client = client
             logger.info(
                 "ClickHouse HTTP client created (%s:%s/%s)",
@@ -153,8 +176,16 @@ ORDER BY (key, ts)
             cert.get("serial_number") or "",
             dns_names,
             cert.get("fingerprint_sha256") or "",
+            cert.get("ct_entry_type") or "",
+            cert.get("format") or "",
         ]
         self._buffer.append(row)
+        # Update buffer size metric for monitoring queue/backlog
+        try:
+            if self._metrics:
+                self._metrics.db_buffer_size.set(len(self._buffer))
+        except Exception:
+            pass
 
     async def flush(self) -> None:
         """Flush all buffered rows to ClickHouse in a single INSERT."""
@@ -166,15 +197,37 @@ ORDER BY (key, ts)
                 return
             rows = self._buffer
             self._buffer = []
+            try:
+                if self._metrics:
+                    self._metrics.db_buffer_size.set(0)
+            except Exception:
+                pass
 
             count = len(rows)
             t0 = time.monotonic()
             try:
+                # clickhouse-connect clients are not safe for concurrent
+                # queries from multiple threads. Create a transient client
+                # inside the thread to perform the insert to avoid
+                # "concurrent queries within the same session" errors.
+                def _thread_insert(client_params, rows_to_insert, cols):
+                    temp = None
+                    try:
+                        temp = clickhouse_connect.get_client(**client_params)
+                        temp.insert("ct_certs", rows_to_insert, column_names=cols)
+                    finally:
+                        if temp:
+                            try:
+                                temp.close()
+                            except Exception:
+                                pass
+
+                params = self._client_params or {}
                 await asyncio.to_thread(
-                    self._client.insert,
-                    "ct_certs",
+                    _thread_insert,
+                    params,
                     rows,
-                    column_names=self._INSERT_COLUMNS,
+                    self._INSERT_COLUMNS,
                 )
                 elapsed = time.monotonic() - t0
                 logger.debug(
@@ -291,8 +344,18 @@ ORDER BY (key, ts)
                 items = getattr(rows, "result_rows", None) or getattr(rows, "rows", None) or []
 
             if items and len(items) > 0:
-                # rows are dict-like
-                return items[0].get("value")
+                row = items[0]
+                try:
+                    if hasattr(row, "get"):
+                        return row.get("value")
+                    if isinstance(row, (list, tuple)):
+                        return row[0] if len(row) > 0 else None
+                    # Fallback: return the row as-is (string/scalar)
+                    return row
+                except Exception:
+                    # Be defensive: log and continue to return None
+                    logger.exception("Unexpected row format for latest setting %s", key)
+                    return None
         except Exception:
             logger.exception("Failed to query latest setting %s", key)
         finally:

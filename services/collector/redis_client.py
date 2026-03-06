@@ -1,4 +1,9 @@
-"""Async Redis publisher for broadcasting parsed certificates in real-time."""
+"""Async Redis publisher for broadcasting parsed certificates.
+
+Provides `RedisPublisher` which wraps `redis.asyncio` and exposes
+`publish`/`publish_batch` helpers. When Redis or the library is not
+available the publisher is a no-op and metrics reflect availability.
+"""
 
 from __future__ import annotations
 
