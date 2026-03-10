@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -12,10 +13,11 @@ from pydantic import BaseModel, Field
 # Response models
 # ---------------------------------------------------------------------------
 
+
 class CertificateOut(BaseModel):
     """Single certificate record returned by the API."""
 
-    id: Optional[str] = None   # UUID in ClickHouse
+    id: Optional[UUID] = None   # UUID in ClickHouse
     log: Optional[str] = None
     subject: Optional[str] = None
     issuer: Optional[str] = None
