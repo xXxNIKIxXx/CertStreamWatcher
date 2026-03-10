@@ -87,3 +87,6 @@ class TimeseriesResponse(BaseModel):
 
 class EnrichmentResponse(BaseModel):
     query: str
+    certificate: Optional[CertificateOut] = None
+    enrichment: Optional[dict] = None  # Add enrichment fields as needed
+    ip_matches: Optional[list] = None  # List of certs matching IP, if searched by IP
