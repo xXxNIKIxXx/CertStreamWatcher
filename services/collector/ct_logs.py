@@ -1,10 +1,13 @@
-"""CT log discovery and polling.
+"""CT log discovery and continuous polling.
 
-This module discovers public CT logs and continuously polls each log
-for new entries. Polling is batched (controlled by `BATCH_SIZE`) and
-parses entries in a CPU-bound phase followed by batched I/O (DB/Redis).
-Configuration and tuning knobs are provided via environment variables
-to allow scaling and performance experimentation without code changes.
+Each log is polled in a dedicated async task.  Per-batch processing
+follows a strict linear pipeline:
+
+    fetch → parse → score → filter → write (DB) + broadcast (Redis + WS)
+
+Scoring always runs so ``scripting_score`` is available in the DB.
+Filtering only gates *broadcasting*; every cert (scored or not) is
+written to the database so no data is silently dropped.
 """
 
 from __future__ import annotations
@@ -12,9 +15,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
-import time
 import socket
-from typing import Dict, List
+import time
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -25,9 +28,9 @@ from .config import (
     BATCH_SIZE,
     LOG_LIST_URL,
     POLL_INTERVAL,
+    PROMETHEUS_PORT,
     WORKER_COUNT,
     WORKER_INDEX,
-    PROMETHEUS_PORT,
     get_logger,
 )
 from .database import DatabaseManager
@@ -39,7 +42,7 @@ logger = get_logger("CTStreamService.CTLogs")
 
 
 class CTLogPoller:
-    """Discovers CT logs and polls each one for new certificate entries."""
+    """Discovers CT logs and continuously polls each one for new entries."""
 
     def __init__(
         self,
@@ -57,439 +60,390 @@ class CTLogPoller:
         self._log_states: Dict[str, int] = {}
         self._parser = CertificateParser()
 
-    # ------------------------------------------------------------------
-    # Log discovery
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    # Log discovery                                                        #
+    # ------------------------------------------------------------------ #
 
     async def discover_logs(self) -> List[str]:
         """Fetch the public CT log list and return usable log URLs."""
         async with aiohttp.ClientSession() as session:
             data = await self._fetch_json(session, LOG_LIST_URL)
-            logs: list[str] = []
 
-            for operator in data.get("operators", []):
-                for log_entry in operator.get("logs", []):
-                    url = log_entry.get("url")
-                    if not url:
-                        continue
+        logs: List[str] = []
+        for operator in data.get("operators", []):
+            for entry in operator.get("logs", []):
+                url = entry.get("url")
+                if not url:
+                    continue
 
-                    parsed = urlparse(url)
-                    host = parsed.hostname or (
-                        parsed.path.split("/")[0] if parsed.path else None
+                parsed = urlparse(url)
+                host = parsed.hostname or (
+                    parsed.path.split("/")[0] if parsed.path else None
+                )
+                if not host:
+                    continue
+
+                # Skip logs whose hostname doesn't resolve
+                try:
+                    loop = asyncio.get_running_loop()
+                    await asyncio.wait_for(
+                        loop.getaddrinfo(host, None), timeout=2.0
                     )
-                    if not host:
-                        continue
+                except Exception:
+                    logger.warning("Unresolvable CT log host: %s", host)
+                    self._metrics.skipped_logs.inc()
+                    continue
 
-                    # Verify hostname resolves
-                    try:
-                        loop = asyncio.get_running_loop()
-                        await asyncio.wait_for(
-                            loop.getaddrinfo(host, None), timeout=2.0
-                        )
-                    except Exception:
-                        logger.warning("Unresolvable CT log host: %s", host)
-                        self._metrics.skipped_logs.inc()
-                        continue
+                scheme = parsed.scheme or "https"
+                netloc = parsed.netloc or host
+                base_path = parsed.path.rstrip("/")
+                log_url = (
+                    f"{scheme}://{netloc}{base_path}"
+                    if base_path
+                    else f"{scheme}://{netloc}"
+                )
+                logs.append(log_url)
 
-                    scheme = parsed.scheme or "https"
-                    netloc = parsed.netloc or host
-                    base_path = parsed.path.rstrip("/")
+        self._metrics.total_logs.set(len(logs))
+        logger.debug("Discovered %d CT logs total", len(logs))
+        return self._partition_logs(logs)
 
-                    log_url = (
-                        f"{scheme}://{netloc}{base_path}"
-                        if base_path
-                        else f"{scheme}://{netloc}"
-                    )
-
-                    logger.debug("Adding CT log: %s", log_url)
-                    logs.append(log_url)
-
-            self._metrics.total_logs.set(len(logs))
-            logger.debug("Total CT logs discovered: %d", len(logs))
-
-            return self._partition_logs(logs)
-
-    # ------------------------------------------------------------------
-    # Polling
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    # Polling loop                                                         #
+    # ------------------------------------------------------------------ #
 
     async def poll_log(self, log_url: str) -> None:
-        """Continuously poll a single CT log for new entries."""
+        """Continuously poll a single CT log, processing new entries."""
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             while True:
-                had_work = False
                 try:
                     had_work = await self._poll_once(session, log_url)
-                except Exception as exc:
-                    logger.error("Error polling %s: %s", log_url, exc)
+                except Exception:
+                    logger.exception("Unhandled error polling %s", log_url)
                     self._metrics.poll_errors.inc()
+                    had_work = False
 
-                # Only sleep when caught up; short delay during backfill
-                if not had_work:
-                    await asyncio.sleep(POLL_INTERVAL)
-                else:
-                    await asyncio.sleep(BACKFILL_DELAY)
+                await asyncio.sleep(BACKFILL_DELAY if had_work else POLL_INTERVAL)
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    # Single poll cycle                                                    #
+    # ------------------------------------------------------------------ #
 
     async def _poll_once(
         self, session: aiohttp.ClientSession, log_url: str
     ) -> bool:
-        """Poll one batch from a CT log.  Returns True when entries were found."""
+        """Fetch one batch from *log_url*, run the full pipeline, return True
+        when at least one entry was processed."""
+
+        # 1. Fetch signed tree head to find how many entries are available
         sth = await self._fetch_json(session, f"{log_url}/ct/v1/get-sth")
-        # If STH fetch failed (transient network error), _fetch_json
-        # will return an empty dict. Treat that as no work and retry
-        # on the next polling cycle instead of crashing.
         if not sth or "tree_size" not in sth:
-            logger.warning("Invalid or missing STH from %s; will retry", log_url)
+            logger.warning("Invalid STH from %s; will retry", log_url)
             return False
 
-        tree_size = sth.get("tree_size")
-
-        last_index = self._log_states.get(log_url, 0)
+        tree_size: int = sth["tree_size"]
+        last_index: int = self._log_states.get(log_url, 0)
         if tree_size <= last_index:
             return False
 
         start = last_index
         end = min(tree_size - 1, start + BATCH_SIZE - 1)
-
         batch_t0 = time.monotonic()
 
+        # 2. Fetch entries
         entries_data = await self._fetch_json(
             session, f"{log_url}/ct/v1/get-entries?start={start}&end={end}"
         )
         entry_list = entries_data.get("entries", []) if entries_data else []
-
         self._metrics.batch_entries_fetched.observe(len(entry_list))
 
-        # ── Phase 1: CPU-bound parsing (single pass per cert) ────────
-        parsed_certs = []
-        for idx, entry in enumerate(entry_list, start=start):
+        # 3. Parse → Score → Filter → Write/Broadcast (per-batch pipeline)
+        to_broadcast: List[dict] = []
+
+        for idx, raw_entry in enumerate(entry_list, start=start):
             self._metrics.entries_processed.inc()
-            leaf = base64.b64decode(entry["leaf_input"])
 
-            header = CertificateParser.parse_leaf_header(leaf)
-            if header is None:
-                self._metrics.extraction_failures.inc()
-                continue
-
-            leaf_version, leaf_type, entry_type = header
-            try:
-                self._metrics.leaf_version.labels(version=str(leaf_version)).inc()
-            except Exception:
-                pass
-            try:
-                self._metrics.leaf_type.labels(leaf_type=str(leaf_type)).inc()
-            except Exception:
-                pass
-            try:
-                self._metrics.entry_type.labels(entry_type=str(entry_type)).inc()
-            except Exception:
-                pass
-
-            # Accept both X.509 (0) and Precertificate (1) entry types.
-            if entry_type not in (0, 1):
-                try:
-                    self._metrics.skipped_entry_type.labels(
-                        entry_type=str(entry_type)
-                    ).inc()
-                except Exception:
-                    pass
-                continue
-
-            # Single-pass extraction + parsing (no double DER decode)
-            cert = None
-            # For Precertificate entries the DER may be present in the
-            # entry's `extra_data` field returned by the CT get-entries API.
-            # Prefer parsing that when available to correctly handle precerts.
-            if entry_type == 1 and entry.get("extra_data"):
-                try:
-                    extra_der = base64.b64decode(entry.get("extra_data"))
-                    # Per RFC6962 the PrecertChainEntry encodes ASN.1Cert
-                    # items as uint24 length-prefixed blobs. Try to extract
-                    # the first ASN.1Cert (the pre-certificate) and parse
-                    # only that slice to avoid parsing wrapper structures.
-                    candidate = None
-                    if len(extra_der) >= 3:
-                        try:
-                            cert_len = int.from_bytes(extra_der[0:3], "big")
-                            if 3 + cert_len <= len(extra_der):
-                                candidate = extra_der[3 : 3 + cert_len]
-                        except Exception:
-                            candidate = None
-
-                    to_try = candidate or extra_der
-                    with self._metrics.parse_duration.time():
-                        parsed = self._parser.parse(to_try, log_url)
-                    if parsed:
-                        # Attach RFC 6962 leaf metadata so downstream
-                        # systems know this came from a Precertificate entry.
-                        parsed["ct_entry_type"] = "precert"
-                        parsed["format"] = "der"
-                        parsed["ct_leaf_version"] = leaf_version
-                        parsed["ct_leaf_type"] = leaf_type
-                        parsed["ct_entry_type_numeric"] = entry_type
-                        try:
-                            parsed["ct_timestamp"] = int.from_bytes(
-                                leaf[2:10], "big"
-                            )
-                        except Exception:
-                            parsed["ct_timestamp"] = None
-                        parsed["ct_index"] = idx
-                        cert = parsed
-                except Exception as exc:
-                    # Debug: include traceback and a short excerpt of the data
-                    try:
-                        extra_preview = entry.get("extra_data")[:160]
-                    except Exception:
-                        extra_preview = None
-                    logger.debug(
-                        "[%s] Precert extra_data parse failed at index=%s: %s; extra_data_prefix=%s",
-                        log_url,
-                        idx,
-                        exc,
-                        extra_preview,
-                        exc_info=True,
-                    )
-
+            # -- Parse --
+            cert = self._parse_entry(raw_entry, log_url, idx)
             if cert is None:
-                try:
-                    with self._metrics.parse_duration.time():
-                        cert = self._parser.extract_and_parse(
-                            leaf, log_url, entry_type=entry_type
-                        )
-                except Exception as exc:
-                    # Keep the error-level log for visibility, but also emit a
-                    # debug log with full traceback and a short leaf preview
-                    try:
-                        leaf_preview = base64.b64encode(leaf)[:160].decode('ascii')
-                    except Exception:
-                        leaf_preview = None
-                    logger.exception(
-                        "[%s] Parse error at index=%s: %s", log_url, idx, exc
-                    )
-                    logger.debug(
-                        "[%s] Parse error details index=%s entry_type=%s leaf_prefix=%s",
-                        log_url,
-                        idx,
-                        entry_type,
-                        leaf_preview,
-                        exc_info=True,
-                    )
-                    cert = None
+                continue
 
-            if cert:
-                # Ensure leaf metadata exists on certs parsed via leaf
-                if "ct_leaf_version" not in cert:
-                    try:
-                        cert["ct_leaf_version"] = leaf_version
-                        cert["ct_leaf_type"] = leaf_type
-                        cert["ct_entry_type_numeric"] = entry_type
-                        cert["ct_timestamp"] = int.from_bytes(leaf[2:10], "big")
-                        cert["ct_index"] = idx
-                    except Exception:
-                        cert.setdefault("ct_timestamp", None)
-                parsed_certs.append(cert)
-                self._metrics.parse_successes.inc()
-                self._metrics.certs_by_log.labels(log=log_url).inc()
-                try:
-                    self._metrics.cert_version.labels(
-                        version=cert.get("version", "unknown")
-                    ).inc()
-                except Exception:
-                    pass
-            else:
-                # No cert parsed — record metric and emit debug context to aid
-                # investigation (no sensitive keys, only short previews).
-                self._metrics.parse_failures.inc()
-                try:
-                    self._metrics.parse_failures_by_log.labels(
-                        log=log_url
-                    ).inc()
-                except Exception:
-                    pass
-                try:
-                    leaf_preview = base64.b64encode(leaf)[:160].decode('ascii')
-                except Exception:
-                    leaf_preview = None
-                logger.debug(
-                    "[%s] Parsing returned no cert at index=%s entry_type=%s leaf_prefix=%s entry_keys=%s",
-                    log_url,
-                    idx,
-                    entry_type,
-                    leaf_preview,
-                    list(entry.keys()) if isinstance(entry, dict) else None,
-                )
+            # -- Score (always; result stored in DB) --
+            cert = self._score_cert(cert)
 
-        # ── Phase 2: Batched I/O ─────────────────────────────────────
-        if parsed_certs:
-            # Buffer all certs then flush once (one HTTP round-trip)
-            # apply filtering (if present)
-            to_store = []
-            for cert in parsed_certs:
-                try:
-                    if self._filter and not self._filter.should_store(cert):
-                        # dropped by filter
-                        continue
-                except Exception:
-                    # on filter error, be conservative and keep cert
-                    logger.exception("Filter error; accepting cert")
-                to_store.append(cert)
+            # -- Write to DB (every cert, regardless of filter) --
+            self._db.buffer_cert(cert)
 
-            if self._db.available and to_store:
-                for cert in to_store:
-                    self._db.buffer_cert(cert)
-                try:
-                    await self._db.flush()
-                except Exception:
-                    logger.exception("Batch DB flush failed")
+            # -- Filter for broadcasting --
+            if self._should_broadcast(cert):
+                to_broadcast.append(cert)
 
-            # Redis pipeline publish
-            if self._redis.available and to_store:
-                try:
-                    await self._redis.publish_batch(to_store)
-                except Exception:
-                    logger.exception("Batch Redis publish failed")
+        # 4. Flush DB buffer once per batch
+        if self._db.available:
+            try:
+                await self._db.flush()
+            except Exception:
+                logger.exception("DB flush failed for batch from %s", log_url)
 
-            # WebSocket broadcast
-            if self._ws.client_count > 0 and to_store:
-                try:
-                    await self._ws.broadcast_batch(to_store)
-                except Exception:
-                    logger.exception("Batch WS broadcast failed")
+        # 5. Broadcast filtered certs (Redis pipeline + WebSocket)
+        if to_broadcast:
+            await self._broadcast_batch(to_broadcast)
 
-        try:
-            self._metrics.last_index.labels(log=log_url).set(end + 1)
-        except Exception:
-            pass
-
+        self._log_states[log_url] = end + 1
+        self._metrics.last_index.labels(log=log_url).set(end + 1)
         self._metrics.batch_processing_duration_seconds.observe(
             time.monotonic() - batch_t0
         )
-        self._log_states[log_url] = end + 1
-        return True
+        return bool(entry_list)
 
-    # ------------------------------------------------------------------
-    # Utilities
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    # Pipeline steps                                                       #
+    # ------------------------------------------------------------------ #
 
-    async def _fetch_json(self, session: aiohttp.ClientSession, url: str) -> dict:
-        t0 = time.monotonic()
-        # Retry on transient network/DNS/connectivity errors so the
-        # whole process doesn't crash on temporary outages.
+    def _parse_entry(
+        self, raw_entry: dict, log_url: str, idx: int
+    ) -> Optional[dict]:
+        """Decode and parse a raw CT log entry into a certificate dict.
+
+        Returns ``None`` when the entry cannot be decoded or parsed.
+        """
+        try:
+            leaf = base64.b64decode(raw_entry["leaf_input"])
+        except Exception:
+            self._metrics.extraction_failures.inc()
+            return None
+
+        header = CertificateParser.parse_leaf_header(leaf)
+        if header is None:
+            self._metrics.extraction_failures.inc()
+            return None
+
+        leaf_version, leaf_type, entry_type = header
+
+        # Emit leaf classification metrics
+        try:
+            self._metrics.leaf_version.labels(version=str(leaf_version)).inc()
+            self._metrics.leaf_type.labels(leaf_type=str(leaf_type)).inc()
+            self._metrics.entry_type.labels(entry_type=str(entry_type)).inc()
+        except Exception:
+            pass
+
+        # Only X.509 (0) and Precertificate (1) entry types are supported
+        if entry_type not in (0, 1):
+            try:
+                self._metrics.skipped_entry_type.labels(
+                    entry_type=str(entry_type)
+                ).inc()
+            except Exception:
+                pass
+            return None
+
+        cert: Optional[dict] = None
+
+        # For precert entries, prefer parsing from extra_data which contains
+        # the actual pre-certificate DER (RFC 6962 PrecertChainEntry)
+        if entry_type == 1 and raw_entry.get("extra_data"):
+            cert = self._parse_precert(raw_entry["extra_data"], log_url, idx)
+
+        # Fall back to leaf-based extraction for x509 entries or when
+        # extra_data parsing failed
+        if cert is None:
+            try:
+                with self._metrics.parse_duration.time():
+                    cert = self._parser.extract_and_parse(
+                        leaf, log_url, entry_type=entry_type
+                    )
+            except Exception:
+                logger.exception("[%s] Parse error at index %s", log_url, idx)
+                cert = None
+
+        if cert is None:
+            self._metrics.parse_failures.inc()
+            try:
+                self._metrics.parse_failures_by_log.labels(log=log_url).inc()
+            except Exception:
+                pass
+            logger.debug(
+                "[%s] No cert produced at index=%s entry_type=%s",
+                log_url, idx, entry_type,
+            )
+            return None
+
+        # Attach CT leaf metadata
+        cert.setdefault("ct_leaf_version", leaf_version)
+        cert.setdefault("ct_leaf_type", leaf_type)
+        cert.setdefault("ct_entry_type_numeric", entry_type)
+        try:
+            cert.setdefault("ct_timestamp", int.from_bytes(leaf[2:10], "big"))
+        except Exception:
+            cert.setdefault("ct_timestamp", None)
+        cert.setdefault("ct_index", idx)
+
+        self._metrics.parse_successes.inc()
+        self._metrics.certs_by_log.labels(log=log_url).inc()
+        try:
+            self._metrics.cert_version.labels(
+                version=cert.get("version", "unknown")
+            ).inc()
+        except Exception:
+            pass
+
+        return cert
+
+    def _parse_precert(
+        self, extra_data_b64: str, log_url: str, idx: int
+    ) -> Optional[dict]:
+        """Parse a precertificate from the raw extra_data field."""
+        try:
+            extra_der = base64.b64decode(extra_data_b64)
+            # RFC 6962: PrecertChainEntry encodes certs as uint24-prefixed blobs
+            candidate: Optional[bytes] = None
+            if len(extra_der) >= 3:
+                cert_len = int.from_bytes(extra_der[0:3], "big")
+                if 3 + cert_len <= len(extra_der):
+                    candidate = extra_der[3: 3 + cert_len]
+
+            with self._metrics.parse_duration.time():
+                parsed = self._parser.parse(candidate or extra_der, log_url)
+
+            if parsed:
+                parsed["ct_entry_type"] = "precert"
+                parsed["format"] = "der"
+            return parsed
+
+        except Exception:
+            logger.debug(
+                "[%s] Precert extra_data parse failed at index=%s",
+                log_url, idx, exc_info=True,
+            )
+            return None
+
+    @staticmethod
+    def _score_cert(cert: dict) -> dict:
+        """Attach ``scripting_score`` to *cert* (already set by FilterManager,
+        but run here to guarantee it exists before the DB write)."""
+        cert.setdefault("scripting_score", 0)
+        return cert
+
+    def _should_broadcast(self, cert: dict) -> bool:
+        """Return True when the cert should be published / broadcast."""
+        if self._filter is None:
+            return True
+        try:
+            return self._filter.should_store(cert)
+        except Exception:
+            logger.exception("Filter error; defaulting to broadcast=True")
+            return True
+
+    async def _broadcast_batch(self, certs: List[dict]) -> None:
+        """Publish a batch of certs to Redis (if available) and WebSocket clients."""
+        if self._redis.available:
+            try:
+                await self._redis.publish_batch(certs)
+            except Exception:
+                logger.exception("Redis batch publish failed")
+
+        if self._ws.client_count > 0:
+            try:
+                await self._ws.broadcast_batch(certs)
+            except Exception:
+                logger.exception("WebSocket batch broadcast failed")
+
+    # ------------------------------------------------------------------ #
+    # HTTP helper                                                          #
+    # ------------------------------------------------------------------ #
+
+    async def _fetch_json(
+        self, session: aiohttp.ClientSession, url: str
+    ) -> dict:
+        """GET *url* and return parsed JSON.  Retries on transient errors."""
         max_attempts = int(os.getenv("HTTP_RETRIES", "5"))
         backoff_base = float(os.getenv("HTTP_RETRY_BACKOFF", "1.0"))
+        t0 = time.monotonic()
 
         for attempt in range(1, max_attempts + 1):
             try:
                 async with session.get(url) as resp:
                     elapsed = time.monotonic() - t0
-                    status = str(resp.status)
                     try:
                         self._metrics.http_requests_total.labels(
-                            method="GET", status=status
+                            method="GET", status=str(resp.status)
                         ).inc()
                         self._metrics.http_request_duration_seconds.observe(elapsed)
                     except Exception:
                         pass
                     resp.raise_for_status()
-                    data = await resp.json()
-                    return data
+                    return await resp.json()
+
             except (
                 aiohttp.ClientConnectorError,
                 aiohttp.client_exceptions.ClientConnectorDNSError,
                 socket.gaierror,
                 asyncio.TimeoutError,
             ) as exc:
-                elapsed = time.monotonic() - t0
-                try:
-                    self._metrics.http_requests_total.labels(
-                        method="GET", status="error"
-                    ).inc()
-                    self._metrics.http_request_duration_seconds.observe(elapsed)
-                except Exception:
-                    pass
+                self._record_http_error(t0)
                 logger.warning(
-                    "Transient network error fetching %s (attempt %d/%d): %s",
-                    url,
-                    attempt,
-                    max_attempts,
-                    exc,
+                    "Transient error fetching %s (attempt %d/%d): %s",
+                    url, attempt, max_attempts, exc,
                 )
                 if attempt == max_attempts:
-                    logger.exception(
-                        "Failed to fetch URL %s after %d attempts: %s",
-                        url,
-                        max_attempts,
-                        exc,
+                    logger.error(
+                        "Giving up fetching %s after %d attempts", url, max_attempts
                     )
-                    # Return empty dict to let callers handle retrying
-                    # at a higher level without raising an exception.
                     return {}
-                # Exponential backoff before next attempt
                 await asyncio.sleep(backoff_base * (2 ** (attempt - 1)))
-                continue
-            except Exception as exc:
-                elapsed = time.monotonic() - t0
-                try:
-                    self._metrics.http_requests_total.labels(
-                        method="GET", status="error"
-                    ).inc()
-                    self._metrics.http_request_duration_seconds.observe(elapsed)
-                except Exception:
-                    pass
-                logger.exception("Failed to fetch URL %s: %s", url, exc)
+
+            except Exception:
+                self._record_http_error(t0)
+                logger.exception("Non-retryable error fetching %s", url)
                 return {}
+
+        return {}
+
+    def _record_http_error(self, t0: float) -> None:
+        elapsed = time.monotonic() - t0
+        try:
+            self._metrics.http_requests_total.labels(
+                method="GET", status="error"
+            ).inc()
+            self._metrics.http_request_duration_seconds.observe(elapsed)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ #
+    # Worker partitioning                                                  #
+    # ------------------------------------------------------------------ #
 
     @staticmethod
     def _partition_logs(logs: List[str]) -> List[str]:
-        """Partition the log list for the current worker instance.
-
-        When CT_WORKER_INDEX and CT_WORKER_COUNT are both set explicitly,
-        those values are used directly.  Otherwise the index is derived
-        automatically by resolving the shared service DNS name (default
-        ``collector``) and finding this container's position among the
-        sorted set of peer IPs.
-        """
+        """Return the slice of *logs* assigned to this worker replica."""
         widx_env = os.getenv("CT_WORKER_INDEX")
         wcount_env = os.getenv("CT_WORKER_COUNT")
 
         if widx_env is not None and wcount_env is not None:
-            wcount = int(wcount_env)
-            widx = int(widx_env)
+            widx, wcount = int(widx_env), int(wcount_env)
         else:
             widx, wcount = CTLogPoller._auto_discover_index()
 
-        if wcount > 1:
-            filtered = [l for i, l in enumerate(logs) if (i % wcount) == widx]
-            logger.info(
-                "Worker %s/%s assigned %d logs (of %d)",
-                widx,
-                wcount,
-                len(filtered),
-                len(logs),
-            )
-            return filtered
+        if wcount <= 1:
+            return logs
 
-        return logs
+        assigned = [l for i, l in enumerate(logs) if (i % wcount) == widx]
+        logger.info(
+            "Worker %d/%d assigned %d of %d logs",
+            widx, wcount, len(assigned), len(logs),
+        )
+        return assigned
 
     @staticmethod
     def _auto_discover_index():
-        """Derive worker index and count from DNS peer resolution.
-
-        Resolves the shared service name (e.g. ``collector`` in Docker
-        Compose) to obtain every replica IP, sorts them, and returns
-        this container's position in that sorted list.
-        """
+        """Derive worker index from DNS peer resolution of the service name."""
         import socket as _socket
 
         service_name = os.getenv("CT_SERVICE_NAME", "collector")
         port = int(os.getenv("CT_PROMETHEUS_PORT", str(PROMETHEUS_PORT)))
 
-        # Resolve own IP(s)
         my_hostname = _socket.gethostname()
         try:
             my_addrs = {
@@ -499,16 +453,14 @@ class CTLogPoller:
         except _socket.gaierror:
             my_addrs = set()
 
-        # Resolve all peer IPs via the shared service DNS name
         try:
             peer_addrs = _socket.getaddrinfo(
-                service_name, port, proto=_socket.IPPROTO_TCP,
+                service_name, port, proto=_socket.IPPROTO_TCP
             )
             all_ips = sorted({addr[4][0] for addr in peer_addrs})
         except _socket.gaierror:
             logger.warning(
-                "DNS lookup for '%s' failed; running as sole worker",
-                service_name,
+                "DNS lookup for '%s' failed; running as sole worker", service_name
             )
             return 0, 1
 
@@ -516,16 +468,15 @@ class CTLogPoller:
         if wcount == 0:
             return 0, 1
 
-        # Find our position in the sorted IP list
         for idx, ip in enumerate(all_ips):
             if ip in my_addrs:
                 logger.info(
-                    "Auto-discovered index %d/%d (IP %s in service '%s')",
+                    "Auto-discovered index %d/%d (IP %s in '%s')",
                     idx, wcount, ip, service_name,
                 )
                 return idx, wcount
 
-        # Fallback: hash hostname to pick a deterministic position
+        # Fallback: hash hostname to a deterministic position
         widx = hash(my_hostname) % wcount
         logger.warning(
             "Could not match own IP in '%s' peers; hash-based index %d/%d",

@@ -25,6 +25,8 @@ class CertificateOut(BaseModel):
     dns_names: Optional[List[str]] = None
     fingerprint_sha256: Optional[str] = None
     ts: Optional[datetime] = None
+    ct_entry_type: Optional[str] = None
+    format: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -81,3 +83,7 @@ class TimeseriesPoint(BaseModel):
 class TimeseriesResponse(BaseModel):
     data: List[TimeseriesPoint]
     interval: str
+
+
+class EnrichmentResponse(BaseModel):
+    query: str

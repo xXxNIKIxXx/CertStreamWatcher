@@ -1,14 +1,18 @@
-"""Async Redis subscriber for listening to settings updates (ct:settings).
+"""Async Redis subscriber for receiving live settings updates (ct:settings).
 
-Listens for JSON messages and invokes a callback with the parsed payload.
+Listens for JSON messages on the ``ct:settings`` channel and invokes a
+synchronous callback with the parsed payload.
+
+Disabled automatically when ``CT_REDIS_DISABLE=1`` is set.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 from typing import Callable
 
-from .config import get_logger, REDIS_URL
+from .config import get_logger, REDIS_URL, REDIS_DISABLED
 
 logger = get_logger("CTStreamService.RedisSubscriber")
 
@@ -21,20 +25,27 @@ except Exception:
 class RedisSubscriber:
     CHANNEL = "ct:settings"
 
-    def __init__(self, on_message: Callable[[dict], None]):
+    def __init__(self, on_message: Callable[[dict], None]) -> None:
         self._conn = None
-        self._task = None
+        self._task: asyncio.Task | None = None
         self._on_message = on_message
 
     async def init(self) -> None:
-        if redis_from_url is None or not REDIS_URL:
-            logger.info("Redis subscriber disabled (redis not available or CT_REDIS_URL unset)")
+        """Subscribe to the settings channel (no-op when disabled)."""
+        if REDIS_DISABLED:
+            logger.info("Redis subscriber disabled (CT_REDIS_DISABLE=1)")
             return
+
+        if redis_from_url is None or not REDIS_URL:
+            logger.info(
+                "Redis subscriber disabled (redis not available or CT_REDIS_URL unset)"
+            )
+            return
+
         try:
             self._conn = redis_from_url(REDIS_URL)
             await self._conn.ping()
             logger.info("Redis subscriber connected to %s", REDIS_URL)
-            # start listening task
             self._task = asyncio.create_task(self._run())
         except Exception:
             logger.exception("Failed to start Redis subscriber")
@@ -46,10 +57,7 @@ class RedisSubscriber:
             await pubsub.subscribe(self.CHANNEL)
             logger.info("Subscribed to Redis channel %s", self.CHANNEL)
             async for msg in pubsub.listen():
-                if msg is None:
-                    continue
-                # message types: subscribe, message
-                if msg.get("type") != "message":
+                if msg is None or msg.get("type") != "message":
                     continue
                 data = msg.get("data")
                 try:
@@ -59,7 +67,6 @@ class RedisSubscriber:
                         payload = json.loads(data)
                     else:
                         continue
-                    # invoke callback
                     try:
                         self._on_message(payload)
                     except Exception:

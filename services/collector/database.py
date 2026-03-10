@@ -1,8 +1,8 @@
-"""Async database manager for persisting parsed certificate metadata (ClickHouse).
+"""Async ClickHouse database manager with buffered batch inserts.
 
-Uses clickhouse-connect (HTTP protocol) with buffered batch inserts for
-maximum throughput.  Rows are accumulated in memory and flushed in bulk
-via a single INSERT, dramatically reducing HTTP round-trips.
+Rows are accumulated in memory and flushed in bulk via a single INSERT,
+dramatically reducing HTTP round-trips.  The ``scripting_score`` field
+produced by the scoring step is persisted alongside each certificate.
 """
 
 from __future__ import annotations
@@ -19,19 +19,18 @@ logger = get_logger("CTStreamService.Database")
 
 try:
     import clickhouse_connect
-    _ch_available = True
+    _CH_AVAILABLE = True
 except ImportError:
-    _ch_available = False
+    _CH_AVAILABLE = False
 
 
-def _parse_clickhouse_dsn(dsn: str) -> dict:
-    """Extract host, port, user, password, database from a clickhouse:// DSN.
+def _parse_dsn(dsn: str) -> dict:
+    """Extract connection params from a ``clickhouse://`` DSN.
 
-    The collector DSN uses port 9000 (native) by convention, but
-    clickhouse-connect needs the HTTP port (8123).  We auto-remap 9000->8123.
+    clickhouse-connect uses the HTTP port (8123); auto-remap 9000 → 8123
+    for convenience.
     """
     from urllib.parse import urlparse
-
     parsed = urlparse(dsn)
     port = parsed.port or 8123
     if port == 9000:
@@ -46,123 +45,128 @@ def _parse_clickhouse_dsn(dsn: str) -> dict:
 
 
 class DatabaseManager:
-    """Manages a ClickHouse HTTP client with buffered batch inserts."""
+    """ClickHouse HTTP client with an in-memory write buffer."""
 
-    CREATE_TABLE_SQL = """
+    # ------------------------------------------------------------------ #
+    # Schema                                                               #
+    # ------------------------------------------------------------------ #
+
+    _CREATE_CERTS_SQL = """
 CREATE TABLE IF NOT EXISTS ct_certs (
-    id          UUID DEFAULT generateUUIDv4(),
-    log         String,
-    subject     String,
-    issuer      String,
-    not_before  DateTime64(3, 'UTC'),
-    not_after   DateTime64(3, 'UTC'),
-    serial_number String,
-    dns_names   Array(String),
+    id                 UUID DEFAULT generateUUIDv4(),
+    log                String,
+    subject            String,
+    issuer             String,
+    not_before         DateTime64(3, 'UTC'),
+    not_after          DateTime64(3, 'UTC'),
+    serial_number      String,
+    dns_names          Array(String),
     fingerprint_sha256 String,
-    ct_entry_type String,
-    format      String,
-    ts          DateTime64(3, 'UTC') DEFAULT now64(3)
+    ct_entry_type      String,
+    format             String,
+    scripting_score    Int32 DEFAULT 0,
+    ts                 DateTime64(3, 'UTC') DEFAULT now64(3)
 )
 ENGINE = MergeTree()
 ORDER BY (ts, fingerprint_sha256)
 PARTITION BY toYYYYMM(ts)
 """
 
-    # Settings table for persisted configuration (append-only; latest by ts)
-    CREATE_SETTINGS_SQL = """
+    _CREATE_SETTINGS_SQL = """
 CREATE TABLE IF NOT EXISTS ct_settings (
-    key String,
+    key   String,
     value String,
-    ts DateTime64(3, 'UTC') DEFAULT now64(3)
+    ts    DateTime64(3, 'UTC') DEFAULT now64(3)
 )
 ENGINE = MergeTree()
 ORDER BY (key, ts)
 """
 
-    # Columns we actively insert — id & ts use ClickHouse DEFAULT values
-    _INSERT_COLUMNS = [
+    # Columns written on every INSERT (id / ts use ClickHouse defaults)
+    _COLUMNS = [
         "log", "subject", "issuer", "not_before", "not_after",
         "serial_number", "dns_names", "fingerprint_sha256",
-        "ct_entry_type", "format",
+        "ct_entry_type", "format", "scripting_score",
     ]
+
+    # ------------------------------------------------------------------ #
+    # Lifecycle                                                            #
+    # ------------------------------------------------------------------ #
 
     def __init__(self, metrics=None) -> None:
         self._client = None
-        self._client_params = None
+        self._client_params: dict | None = None
         self._metrics = metrics
         self._buffer: List[list] = []
         self._lock = asyncio.Lock()
-        self._flush_task: Optional[asyncio.Task] = None
+        self._flush_task: asyncio.Task | None = None
 
     @property
     def available(self) -> bool:
         return self._client is not None
 
     async def init(self) -> None:
-        """Create the HTTP client, ensure the table, start background flusher."""
-        if not _ch_available:
-            logger.warning("clickhouse-connect not available; DB writes disabled")
-            if self._metrics:
-                self._metrics.db_available.set(0)
+        """Connect to ClickHouse, create tables, and start the buffer flusher."""
+        if not _CH_AVAILABLE:
+            logger.warning("clickhouse-connect not installed; DB writes disabled")
+            self._set_available(0)
             return
 
         try:
-            params = _parse_clickhouse_dsn(DB_DSN)
-            # keep params so synchronous helper methods can create transient clients
+            params = _parse_dsn(DB_DSN)
             self._client_params = params
             client = clickhouse_connect.get_client(**params)
-            await asyncio.to_thread(client.command, self.CREATE_TABLE_SQL)
-            await asyncio.to_thread(client.command, self.CREATE_SETTINGS_SQL)
-            # Ensure new columns exist (for upgrades/migrations)
-            def _ensure_columns():
-                try:
-                    cols = client.query("SELECT name FROM system.columns WHERE table = 'ct_certs'")
-                    existing = {r[0] for r in list(cols)}
-                except Exception:
-                    existing = set()
-                # Add missing columns if necessary
-                alter_cmds = []
-                if 'ct_entry_type' not in existing:
-                    alter_cmds.append("ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS ct_entry_type String")
-                if 'format' not in existing:
-                    alter_cmds.append("ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS format String")
-                for cmd in alter_cmds:
-                    try:
-                        client.command(cmd)
-                    except Exception:
-                        pass
 
-            await asyncio.to_thread(_ensure_columns)
+            await asyncio.to_thread(client.command, self._CREATE_CERTS_SQL)
+            await asyncio.to_thread(client.command, self._CREATE_SETTINGS_SQL)
+            await asyncio.to_thread(self._migrate_columns, client)
+
             self._client = client
             logger.info(
-                "ClickHouse HTTP client created (%s:%s/%s)",
+                "ClickHouse connected (%s:%s/%s)",
                 params["host"], params["port"], params["database"],
             )
+            self._set_available(1)
             if self._metrics:
-                self._metrics.db_available.set(1)
                 self._metrics.db_pool_size.set(1)
-            # Start periodic background flush
             self._flush_task = asyncio.create_task(self._periodic_flush())
+
         except Exception:
-            logger.exception("Failed to initialize ClickHouse client")
+            logger.exception("Failed to initialise ClickHouse client")
             self._client = None
-            if self._metrics:
-                self._metrics.db_available.set(0)
+            self._set_available(0)
+
+    async def close(self) -> None:
+        """Cancel the flusher, flush remaining rows, then close the client."""
+        if self._flush_task:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+
+        await self.flush()
+
+        if self._client:
+            try:
+                self._client.close()
+            except Exception:
+                logger.exception("Error closing ClickHouse client")
+            self._client = None
+            self._set_available(0)
+
+    # ------------------------------------------------------------------ #
+    # Write path                                                           #
+    # ------------------------------------------------------------------ #
 
     def buffer_cert(self, cert: dict) -> None:
-        """Add a parsed certificate to the insert buffer (non-blocking).
-
-        Rows accumulate until flush() is called (explicitly after each
-        batch, or automatically by the periodic background task).
-        """
+        """Append a parsed + scored certificate to the in-memory write buffer."""
         if not self._client:
             return
 
         if self._metrics:
             self._metrics.db_writes_total.inc()
 
-        not_before_val = self._to_datetime(cert.get("not_before"))
-        not_after_val = self._to_datetime(cert.get("not_after"))
         dns_names = cert.get("dns_names") or []
         if isinstance(dns_names, str):
             dns_names = json.loads(dns_names)
@@ -171,21 +175,22 @@ ORDER BY (key, ts)
             cert.get("log") or "",
             cert.get("subject") or "",
             cert.get("issuer") or "",
-            not_before_val or datetime(1970, 1, 1),
-            not_after_val or datetime(1970, 1, 1),
+            self._to_datetime(cert.get("not_before")) or datetime(1970, 1, 1),
+            self._to_datetime(cert.get("not_after")) or datetime(1970, 1, 1),
             cert.get("serial_number") or "",
             dns_names,
             cert.get("fingerprint_sha256") or "",
             cert.get("ct_entry_type") or "",
             cert.get("format") or "",
+            int(cert.get("scripting_score") or 0),
         ]
         self._buffer.append(row)
-        # Update buffer size metric for monitoring queue/backlog
-        try:
-            if self._metrics:
+
+        if self._metrics:
+            try:
                 self._metrics.db_buffer_size.set(len(self._buffer))
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     async def flush(self) -> None:
         """Flush all buffered rows to ClickHouse in a single INSERT."""
@@ -195,58 +200,88 @@ ORDER BY (key, ts)
         async with self._lock:
             if not self._buffer:
                 return
-            rows = self._buffer
-            self._buffer = []
-            try:
-                if self._metrics:
-                    self._metrics.db_buffer_size.set(0)
-            except Exception:
-                pass
+            rows, self._buffer = self._buffer, []
 
-            count = len(rows)
+            if self._metrics:
+                try:
+                    self._metrics.db_buffer_size.set(0)
+                except Exception:
+                    pass
+
             t0 = time.monotonic()
             try:
-                # clickhouse-connect clients are not safe for concurrent
-                # queries from multiple threads. Create a transient client
-                # inside the thread to perform the insert to avoid
-                # "concurrent queries within the same session" errors.
-                def _thread_insert(client_params, rows_to_insert, cols):
-                    temp = None
-                    try:
-                        temp = clickhouse_connect.get_client(**client_params)
-                        temp.insert("ct_certs", rows_to_insert, column_names=cols)
-                    finally:
-                        if temp:
-                            try:
-                                temp.close()
-                            except Exception:
-                                pass
-
                 params = self._client_params or {}
-                await asyncio.to_thread(
-                    _thread_insert,
-                    params,
-                    rows,
-                    self._INSERT_COLUMNS,
-                )
+                columns = self._COLUMNS
+
+                def _insert(params, rows, columns):
+                    tmp = clickhouse_connect.get_client(**params)
+                    try:
+                        tmp.insert("ct_certs", rows, column_names=columns)
+                    finally:
+                        try:
+                            tmp.close()
+                        except Exception:
+                            pass
+
+                await asyncio.to_thread(_insert, params, rows, columns)
                 elapsed = time.monotonic() - t0
-                logger.debug(
-                    "Flushed %d rows to ClickHouse in %.3fs",
-                    count, elapsed,
-                )
+                logger.debug("Flushed %d rows in %.3fs", len(rows), elapsed)
                 if self._metrics:
                     self._metrics.db_write_duration_seconds.observe(elapsed)
-                    self._metrics.db_batch_size.observe(count)
+                    self._metrics.db_batch_size.observe(len(rows))
+
             except Exception:
-                logger.exception("Batch insert failed (%d rows)", count)
+                logger.exception("Batch insert failed (%d rows)", len(rows))
                 if self._metrics:
                     self._metrics.db_write_errors_total.inc()
                     self._metrics.db_write_duration_seconds.observe(
                         time.monotonic() - t0
                     )
 
+    # ------------------------------------------------------------------ #
+    # Settings helpers                                                     #
+    # ------------------------------------------------------------------ #
+
+    def insert_setting(self, key: str, value: str) -> None:
+        """Persist a settings key/value pair (synchronous)."""
+        if not self._client and not self._client_params:
+            return
+        try:
+            self._client.insert(
+                "ct_settings", [[key, value]], column_names=["key", "value"]
+            )
+            if self._metrics:
+                self._metrics.db_writes_total.inc()
+        except Exception:
+            logger.exception("Failed to insert setting %s", key)
+
+    def get_latest_setting(self, key: str) -> Optional[str]:
+        """Return the most recent value for *key*, or ``None`` (synchronous)."""
+        if not self._client and not self._client_params:
+            return None
+        try:
+            rows = self._client.query(
+                f"SELECT value FROM ct_settings "
+                f"WHERE key = '{key}' ORDER BY ts DESC LIMIT 1"
+            )
+            items = list(rows) if rows else []
+            if not items:
+                return None
+            row = items[0]
+            if hasattr(row, "get"):
+                return row.get("value")
+            if isinstance(row, (list, tuple)):
+                return row[0] if row else None
+            return row
+        except Exception:
+            logger.exception("Failed to query latest setting %s", key)
+            return None
+
+    # ------------------------------------------------------------------ #
+    # Private helpers                                                      #
+    # ------------------------------------------------------------------ #
+
     async def _periodic_flush(self) -> None:
-        """Background task: flush the buffer every DB_FLUSH_INTERVAL seconds."""
         while True:
             await asyncio.sleep(DB_FLUSH_INTERVAL)
             try:
@@ -254,119 +289,33 @@ ORDER BY (key, ts)
             except Exception:
                 logger.exception("Periodic flush error")
 
-    async def close(self) -> None:
-        """Cancel the flusher, flush remaining rows, and close the client."""
-        if self._flush_task:
-            self._flush_task.cancel()
-            try:
-                await self._flush_task
-            except asyncio.CancelledError:
-                pass
-        # Final flush
+    def _set_available(self, value: int) -> None:
+        if self._metrics:
+            self._metrics.db_available.set(value)
+
+    @staticmethod
+    def _migrate_columns(client) -> None:
+        """Add any columns that were introduced after initial deployment."""
         try:
-            await self.flush()
+            result = client.query(
+                "SELECT name FROM system.columns WHERE table = 'ct_certs'"
+            )
+            existing = {row[0] for row in list(result)}
         except Exception:
-            logger.exception("Final flush failed")
-        if self._client:
-            try:
-                self._client.close()
-            except Exception:
-                logger.exception("Error closing ClickHouse client")
-            self._client = None
-            if self._metrics:
-                self._metrics.db_available.set(0)
+            existing = set()
 
-    # ------------------------------------------------------------------
-    # Settings helpers
-    # ------------------------------------------------------------------
-
-    def insert_setting(self, key: str, value: str) -> None:
-        """Insert a settings row. Synchronous helper used by FilterManager.
-
-        This method is intentionally synchronous since callers may call it
-        from non-async code paths.
-        """
-        if not self._client and not self._client_params:
-            return
-        try:
-            # Use a transient client for synchronous helper calls to avoid
-            # concurrent-session errors from clickhouse-connect when the
-            # shared async client is used elsewhere.
-            if self._client:
-                self._client.insert(
-                    "ct_settings",
-                    [[key, value]],
-                    column_names=["key", "value"],
-                )
-            else:
-                temp = clickhouse_connect.get_client(**self._client_params)
+        migrations = [
+            ("ct_entry_type",   "ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS ct_entry_type String"),
+            ("format",          "ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS format String"),
+            ("scripting_score", "ALTER TABLE ct_certs ADD COLUMN IF NOT EXISTS scripting_score Int32 DEFAULT 0"),
+        ]
+        for col, sql in migrations:
+            if col not in existing:
                 try:
-                    temp.insert(
-                        "ct_settings",
-                        [[key, value]],
-                        column_names=["key", "value"],
-                    )
-                finally:
-                    try:
-                        temp.close()
-                    except Exception:
-                        pass
-            if self._metrics:
-                self._metrics.db_writes_total.inc()
-        except Exception:
-            logger.exception("Failed to insert setting %s", key)
-
-    def get_latest_setting(self, key: str) -> Optional[str]:
-        """Return the latest value for `key` or None.
-
-        This executes a synchronous query on the underlying client.
-        """
-        if not self._client and not self._client_params:
-            return None
-        client = None
-        try:
-            if self._client:
-                rows = self._client.query(
-                    f"SELECT value FROM ct_settings WHERE key = '{key}' ORDER BY ts DESC LIMIT 1"
-                )
-            else:
-                client = clickhouse_connect.get_client(**self._client_params)
-                rows = client.query(
-                    f"SELECT value FROM ct_settings WHERE key = '{key}' ORDER BY ts DESC LIMIT 1"
-                )
-
-            # clickhouse-connect returns a QueryResult object; make it safe
-            # to index by converting to a list of rows when possible.
-            try:
-                items = list(rows)
-            except TypeError:
-                # Fallback to common attributes on QueryResult
-                items = getattr(rows, "result_rows", None) or getattr(rows, "rows", None) or []
-
-            if items and len(items) > 0:
-                row = items[0]
-                try:
-                    if hasattr(row, "get"):
-                        return row.get("value")
-                    if isinstance(row, (list, tuple)):
-                        return row[0] if len(row) > 0 else None
-                    # Fallback: return the row as-is (string/scalar)
-                    return row
+                    client.command(sql)
+                    logger.info("Migration applied: added column %s", col)
                 except Exception:
-                    # Be defensive: log and continue to return None
-                    logger.exception("Unexpected row format for latest setting %s", key)
-                    return None
-        except Exception:
-            logger.exception("Failed to query latest setting %s", key)
-        finally:
-            if client:
-                try:
-                    client.close()
-                except Exception:
-                    pass
-        return None
-    # Helpers
-    # ------------------------------------------------------------------
+                    logger.warning("Migration skipped for column %s", col)
 
     @staticmethod
     def _to_datetime(value) -> Optional[datetime]:

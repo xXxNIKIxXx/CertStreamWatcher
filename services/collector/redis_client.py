@@ -1,8 +1,8 @@
 """Async Redis publisher for broadcasting parsed certificates.
 
-Provides `RedisPublisher` which wraps `redis.asyncio` and exposes
-`publish`/`publish_batch` helpers. When Redis or the library is not
-available the publisher is a no-op and metrics reflect availability.
+Set ``CT_REDIS_DISABLE=1`` to skip Redis entirely (useful when only the
+built-in WebSocket stream is needed).  When Redis or its driver is
+unavailable the publisher becomes a no-op and metrics reflect that.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 import time
 from typing import Optional
 
-from .config import get_logger, REDIS_URL
+from .config import get_logger, REDIS_URL, REDIS_DISABLED
 
 logger = get_logger("CTStreamService.Redis")
 
@@ -35,62 +35,49 @@ class RedisPublisher:
         return self._conn is not None
 
     async def init(self) -> None:
-        """Connect to Redis."""
+        """Connect to Redis (no-op when disabled or unavailable)."""
+        if REDIS_DISABLED:
+            logger.info("Redis publish disabled (CT_REDIS_DISABLE=1)")
+            self._set_available(0)
+            return
+
         if redis_from_url is None:
-            logger.warning("redis.asyncio not available; Redis publish disabled")
-            if self._metrics:
-                self._metrics.redis_available.set(0)
+            logger.warning("redis.asyncio not installed; Redis publish disabled")
+            self._set_available(0)
             return
 
         if not REDIS_URL:
             logger.info("CT_REDIS_URL not set; Redis publish disabled")
-            if self._metrics:
-                self._metrics.redis_available.set(0)
+            self._set_available(0)
             return
 
         try:
             self._conn = redis_from_url(REDIS_URL)
-            # Verify the connection works
             await self._conn.ping()
             logger.info("Connected to Redis at %s", REDIS_URL)
-            if self._metrics:
-                self._metrics.redis_available.set(1)
+            self._set_available(1)
         except Exception:
             logger.exception("Failed to connect to Redis")
             self._conn = None
-            if self._metrics:
-                self._metrics.redis_available.set(0)
+            self._set_available(0)
 
     async def publish(self, message: dict) -> None:
-        """Publish a JSON-encoded message to the certificates channel."""
+        """Publish a single JSON message to the certificates channel."""
         if not self._conn:
             return
-
-        if self._metrics:
-            self._metrics.redis_publishes_total.inc()
 
         t0 = time.monotonic()
         try:
             await self._conn.publish(self.CHANNEL, json.dumps(message))
-            if self._metrics:
-                self._metrics.redis_publish_duration_seconds.observe(
-                    time.monotonic() - t0
-                )
+            self._observe_publish(t0, success=True)
         except Exception:
             logger.exception("Failed to publish message to Redis")
-            if self._metrics:
-                self._metrics.redis_publish_errors_total.inc()
-                self._metrics.redis_publish_duration_seconds.observe(
-                    time.monotonic() - t0
-                )
+            self._observe_publish(t0, success=False)
 
     async def publish_batch(self, messages: list[dict]) -> None:
-        """Publish multiple JSON-encoded messages using a Redis pipeline."""
+        """Publish multiple messages via a Redis pipeline."""
         if not self._conn or not messages:
             return
-
-        if self._metrics:
-            self._metrics.redis_publishes_total.inc(len(messages))
 
         t0 = time.monotonic()
         try:
@@ -98,24 +85,34 @@ class RedisPublisher:
                 for msg in messages:
                     pipe.publish(self.CHANNEL, json.dumps(msg))
                 await pipe.execute()
-            if self._metrics:
-                self._metrics.redis_publish_duration_seconds.observe(
-                    time.monotonic() - t0
-                )
+            self._observe_publish(t0, success=True, count=len(messages))
         except Exception:
             logger.exception("Failed to publish batch to Redis")
-            if self._metrics:
-                self._metrics.redis_publish_errors_total.inc()
-                self._metrics.redis_publish_duration_seconds.observe(
-                    time.monotonic() - t0
-                )
+            self._observe_publish(t0, success=False)
 
     async def close(self) -> None:
-        """Close the Redis connection."""
         if self._conn:
             try:
                 await self._conn.close()
             except Exception:
                 logger.exception("Error closing Redis connection")
-            if self._metrics:
-                self._metrics.redis_available.set(0)
+            self._conn = None
+            self._set_available(0)
+
+    # ------------------------------------------------------------------
+    # Metrics helpers
+    # ------------------------------------------------------------------
+
+    def _set_available(self, value: int) -> None:
+        if self._metrics:
+            self._metrics.redis_available.set(value)
+
+    def _observe_publish(self, t0: float, *, success: bool, count: int = 1) -> None:
+        if not self._metrics:
+            return
+        elapsed = time.monotonic() - t0
+        if success:
+            self._metrics.redis_publishes_total.inc(count)
+        else:
+            self._metrics.redis_publish_errors_total.inc()
+        self._metrics.redis_publish_duration_seconds.observe(elapsed)

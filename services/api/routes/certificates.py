@@ -122,6 +122,7 @@ async def list_certificates(
     )
     try:
         rows = await db.fetch(data_sql, params, endpoint="list_certificates")
+        print(rows)
         certs = []
         for r in rows:
             try:
@@ -299,6 +300,8 @@ def _row_to_cert(row: dict) -> CertificateOut:
         dns_names=dns_names,
         fingerprint_sha256=row.get("fingerprint_sha256", None),
         ts=row.get("ts", None),
+        ct_entry_type=row.get("ct_entry_type", None),
+        format=row.get("format", None),
     )
 
 
@@ -540,4 +543,6 @@ def _row_to_cert(row) -> CertificateOut:
         dns_names=dns_names,
         fingerprint_sha256=row.get("fingerprint_sha256"),
         ts=row.get("ts"),
+        ct_entry_type=row.get("ct_entry_type"),
+        format=row.get("format"),
     )

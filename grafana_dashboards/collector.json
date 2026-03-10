@@ -1,16 +1,32 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
   "links": [
     {
       "asDropdown": false,
       "icon": "external link",
       "includeVars": true,
       "keepTime": true,
-      "tags": ["certstream"],
+      "tags": [
+        "certstream"
+      ],
       "targetBlank": false,
       "title": "CertStream Dashboards",
       "type": "dashboards"
@@ -19,730 +35,2679 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 100,
+      "panels": [],
       "title": "📊 Throughput Overview",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Entries Processed / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Rate of CT log entries being processed across all collectors",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 10 },
-              { "color": "green", "value": 100 }
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "green",
+                "value": 100
+              }
             ]
           },
           "unit": "ops"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_entries_processed_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "entries/s"
+          "legendFormat": "entries/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
-      "id": 1
+      "title": "Entries Processed / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Certs Parsed OK / sec",
-      "description": "Successfully parsed certificates per second",
-      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Successfully parsed certificates per second. Note: individual certificate rows in ClickHouse include a `ct_entry_type` column (e.g., 'x509' or 'precert') which can be queried from ClickHouse-backed Grafana panels.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 5 },
-              { "color": "green", "value": 50 }
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
             ]
           },
           "unit": "ops"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_entries_parsed_success_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "parsed/s"
+          "legendFormat": "parsed/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
-      "id": 2
+      "title": "Certs Parsed OK / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Parse Failures / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Certificate parse failures per second",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 10 }
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           },
           "unit": "ops"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_parse_failures_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "failures/s"
+          "legendFormat": "failures/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
-      "id": 3
+      "title": "Parse Failures / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Extraction Failures / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "DER certificate extraction failures per second",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 10 }
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           },
           "unit": "ops"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_extraction_failures_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "failures/s"
+          "legendFormat": "failures/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
-      "id": 4
+      "title": "Extraction Failures / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "CT Logs Monitored",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Total number of CT logs being polled",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(ct_total_logs{job=~\"$job\"})",
-          "legendFormat": "logs"
+          "legendFormat": "logs",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
-      "id": 5
+      "title": "CT Logs Monitored",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Poll Errors / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Errors encountered while polling CT logs",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 0.1 },
-              { "color": "red", "value": 1 }
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           },
           "unit": "ops"
-        }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_poll_errors_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "errors/s"
+          "legendFormat": "errors/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "id": 6
+      "title": "Poll Errors / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Entries Processed Rate by Instance",
-      "description": "Per-collector-replica throughput over time",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Per-collector-replica throughput over time",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "rate(ct_entries_processed_total{job=~\"$job\"}[$__rate_interval])",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
-      "id": 7
+      "title": "Entries Processed Rate by Instance",
+      "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Success vs Failure Rate",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Parsed OK vs parse + extraction failures over time",
-      "type": "timeseries",
       "fieldConfig": {
-        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "failures" },
-            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "failures"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_entries_parsed_success_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "success"
+          "legendFormat": "success",
+          "refId": "A"
         },
         {
           "expr": "sum(rate(ct_parse_failures_total{job=~\"$job\"}[$__rate_interval])) + sum(rate(ct_extraction_failures_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "failures"
+          "legendFormat": "failures",
+          "refId": "B"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-      "id": 8
+      "title": "Success vs Failure Rate",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
       "id": 101,
+      "panels": [],
       "title": "⏱️ Certificate Parsing",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Cert Parse Duration (p50 / p95 / p99)",
-      "description": "Certificate parsing latency distribution",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Certificate parsing latency distribution",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         },
         {
           "expr": "histogram_quantile(0.99, sum(rate(ct_cert_parse_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p99"
+          "legendFormat": "p99",
+          "refId": "C"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
-      "id": 9
+      "title": "Cert Parse Duration (p50 / p95 / p99)",
+      "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Certificate Version Distribution",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Breakdown of certificate versions (v1/v2/v3)",
-      "type": "piechart",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 12,
+        "y": 14
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "sort": "desc",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum by (version) (increase(ct_certificate_version_total{job=~\"$job\"}[$__range]))",
-          "legendFormat": "{{version}}"
+          "legendFormat": "{{version}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 14 },
-      "id": 10
+      "title": "Certificate Version Distribution",
+      "type": "piechart"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Leaf Type Distribution",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "MerkleTreeLeaf leaf_type distribution",
-      "type": "piechart",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 16,
+        "y": 14
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "sort": "desc",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum by (leaf_type) (increase(ct_leaf_type_total{job=~\"$job\"}[$__range]))",
-          "legendFormat": "type {{leaf_type}}"
+          "legendFormat": "type {{leaf_type}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 14 },
-      "id": 11
+      "title": "Leaf Type Distribution",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Distribution of CT entry types (x509 vs precert)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type 0"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "der"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type 1"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "pre"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 20,
+        "y": 14
+      },
+      "id": 111,
+      "options": {
+        "displayLabels": [
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "sort": "desc",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "expr": "sum by (entry_type) (increase(ct_entry_type_total{job=~\"$job\"}[$__range]))",
+          "legendFormat": "type {{entry_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Entry Type Distribution",
+      "type": "piechart"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
       "id": 102,
+      "panels": [],
       "title": "🌐 CT Log HTTP Fetching",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "HTTP Request Duration (p50 / p95 / p99)",
-      "description": "Latency of HTTP requests to CT log APIs",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Top CT logs by total processed certificates over the selected range",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 18,
+        "x": 6,
+        "y": 23
+      },
+      "id": 112,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "expr": "topk(10, sum by (log) (increase(ct_certs_processed_by_log_total{job=~\"$job\"}[$__range])))",
+          "legendFormat": "{{log}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Logs (total processed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Latency of HTTP requests to CT log APIs",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         },
         {
           "expr": "histogram_quantile(0.99, sum(rate(ct_http_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p99"
+          "legendFormat": "p99",
+          "refId": "C"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
-      "id": 12
+      "title": "HTTP Request Duration (p50 / p95 / p99)",
+      "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "HTTP Requests by Status Code",
-      "description": "Rate of CT log API requests grouped by HTTP status",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "ops", "custom": { "fillOpacity": 15, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Rate of CT log API requests grouped by HTTP status",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum by (status) (rate(ct_http_requests_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "HTTP {{status}}"
+          "legendFormat": "HTTP {{status}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
-      "id": 13
+      "title": "HTTP Requests by Status Code",
+      "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Batch Entries Fetched (p50 / p95)",
-      "description": "How many entries each batch fetch returns",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "How many entries each batch fetch returns",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_batch_entries_fetched_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_batch_entries_fetched_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
-      "id": 14
+      "title": "Batch Entries Fetched (p50 / p95)",
+      "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Batch Processing Duration (p50 / p95)",
-      "description": "Time to process each batch of CT log entries",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Time to process each batch of CT log entries",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_batch_processing_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_batch_processing_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
-      "id": 15
+      "title": "Batch Processing Duration (p50 / p95)",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
       "id": 103,
+      "panels": [],
       "title": "💾 Database (Collector Writes)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "DB Available",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Whether the database connection pool is up",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
-          ]
-        }
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 50
+      },
+      "id": 16,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "ct_db_available{job=~\"$job\"}",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 40 },
-      "id": 16
+      "title": "DB Available",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "DB Writes / sec",
-      "description": "Rate of certificate inserts into the database",
-      "type": "stat",
-      "fieldConfig": {
-        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Rate of certificate inserts into the database",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 50
+      },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_db_writes_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "writes/s"
+          "legendFormat": "writes/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 40 },
-      "id": 17
+      "title": "DB Writes / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "DB Write Errors / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Rate of failed database writes",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 0.1 }
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
             ]
-          }
-        }
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 50
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_db_write_errors_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "errors/s"
+          "legendFormat": "errors/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 40 },
-      "id": 18
+      "title": "DB Write Errors / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "DB Pool Size",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Current number of connections in the asyncpg pool",
-      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 50
+      },
+      "id": 19,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "ct_db_pool_size{job=~\"$job\"}",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 40 },
-      "id": 19
+      "title": "DB Pool Size",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "DB Write Error Rate %",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Percentage of failed writes out of total writes",
-      "type": "gauge",
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
-          "min": 0, "max": 1,
+          "mappings": [],
+          "max": 1,
+          "min": 0,
           "thresholds": {
+            "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 0.01 },
-              { "color": "red", "value": 0.05 }
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
             ]
-          }
-        }
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 50
+      },
+      "id": 20,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_db_write_errors_total{job=~\"$job\"}[$__rate_interval])) / clamp_min(sum(rate(ct_db_writes_total{job=~\"$job\"}[$__rate_interval])), 1)",
-          "legendFormat": "error rate"
+          "legendFormat": "error rate",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 40 },
-      "id": 20
+      "title": "DB Write Error Rate %",
+      "type": "gauge"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "DB Write Duration (p50 / p95 / p99)",
-      "description": "Latency of individual certificate inserts",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Latency of individual certificate inserts",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         },
         {
           "expr": "histogram_quantile(0.99, sum(rate(ct_db_write_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p99"
+          "legendFormat": "p99",
+          "refId": "C"
         }
       ],
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 44 },
-      "id": 21
+      "title": "DB Write Duration (p50 / p95 / p99)",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
       "id": 104,
+      "panels": [],
       "title": "📡 Redis Publishing",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Redis Available",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Whether the Redis connection is up",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
-          ]
-        }
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 63
+      },
+      "id": 22,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "ct_redis_available{job=~\"$job\"}",
-          "legendFormat": "{{instance}}"
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 53 },
-      "id": 22
+      "title": "Redis Available",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Redis Publishes / sec",
-      "description": "Rate of messages published to Redis ct:certs channel",
-      "type": "stat",
-      "fieldConfig": {
-        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Rate of messages published to Redis ct:certs channel",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 63
+      },
+      "id": 23,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_redis_publishes_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "pub/s"
+          "legendFormat": "pub/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 53 },
-      "id": 23
+      "title": "Redis Publishes / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Redis Publish Errors / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Failed Redis publish operations per second",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
-        }
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 63
+      },
+      "id": 24,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_redis_publish_errors_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "errors/s"
+          "legendFormat": "errors/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 53 },
-      "id": 24
+      "title": "Redis Publish Errors / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Redis Publish Duration (p50 / p95)",
-      "description": "Latency of publishing a cert event to Redis",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Latency of publishing a cert event to Redis",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_redis_publish_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_redis_publish_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         }
       ],
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
-      "id": 25
+      "title": "Redis Publish Duration (p50 / p95)",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 71
+      },
       "id": 105,
+      "panels": [],
       "title": "🔌 WebSocket Broadcasting",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Active WebSocket Clients",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Currently connected WebSocket consumers",
-      "type": "gauge",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "steps": [{ "color": "blue", "value": null }] },
-          "min": 0, "max": 100
-        }
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 72
+      },
+      "id": 26,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(ct_websocket_active_clients{job=~\"$job\"})",
-          "legendFormat": "clients"
+          "legendFormat": "clients",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 62 },
-      "id": 26
+      "title": "Active WebSocket Clients",
+      "type": "gauge"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "WS Broadcasts / sec",
-      "description": "Rate of WebSocket broadcast operations",
-      "type": "stat",
-      "fieldConfig": {
-        "defaults": { "unit": "ops", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Rate of WebSocket broadcast operations",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 72
+      },
+      "id": 27,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_ws_broadcasts_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "broadcasts/s"
+          "legendFormat": "broadcasts/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 62 },
-      "id": 27
+      "title": "WS Broadcasts / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "WS Delivery Errors / sec",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Failed message deliveries to individual WebSocket clients",
-      "type": "stat",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.1 }] }
-        }
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 0.1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 72
+      },
+      "id": 28,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "sum(rate(ct_ws_broadcast_errors_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "errors/s"
+          "legendFormat": "errors/s",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 62 },
-      "id": 28
+      "title": "WS Delivery Errors / sec",
+      "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "WS Broadcast Duration (p50 / p95)",
-      "description": "Time to broadcast a message to all connected clients",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "fillOpacity": 10, "lineWidth": 2 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
+      "description": "Time to broadcast a message to all connected clients",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 0,
+        "y": 76
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(ct_ws_broadcast_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(ct_ws_broadcast_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "B"
         }
       ],
-      "gridPos": { "h": 8, "w": 18, "x": 0, "y": 66 },
-      "id": 29
+      "title": "WS Broadcast Duration (p50 / p95)",
+      "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 74 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 84
+      },
       "id": 106,
+      "panels": [],
       "title": "📋 Per-Log Breakdown",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Certificates Processed by Log",
-      "description": "Per-log certificate processing rate",
-      "type": "timeseries",
-      "fieldConfig": {
-        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 1 } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "description": "Per-log certificate processing rate",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 85
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "expr": "topk(10, rate(ct_certs_processed_by_log_total{job=~\"$job\"}[$__rate_interval]))",
-          "legendFormat": "{{log}}"
+          "legendFormat": "{{log}}",
+          "refId": "A"
         }
       ],
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 75 },
-      "id": 30
+      "title": "Certificates Processed by Log",
+      "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "title": "Last Processed Index per Log",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Current tree position for each monitored CT log",
-      "type": "table",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 95
+      },
+      "id": 31,
+      "options": {},
       "targets": [
         {
           "expr": "ct_log_last_index{job=~\"$job\"}",
-          "legendFormat": "{{log}}",
           "format": "table",
-          "instant": true
+          "instant": true,
+          "legendFormat": "{{log}}",
+          "refId": "A"
         }
       ],
+      "title": "Last Processed Index per Log",
       "transformations": [
-        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "job": true }, "renameByName": { "log": "CT Log", "Value": "Last Index", "instance": "Collector" } } }
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            },
+            "renameByName": {
+              "Value": "Last Index",
+              "instance": "Collector",
+              "log": "CT Log"
+            }
+          }
+        }
       ],
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 85 },
-      "id": 31
+      "type": "table"
     }
   ],
-  "schemaVersion": 39,
-  "style": "dark",
-  "tags": ["certstream", "collector"],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 42,
+  "tags": [
+    "certstream",
+    "collector"
+  ],
   "templating": {
     "list": [
       {
-        "current": { "selected": false, "text": "default", "value": "default" },
-        "hide": 0,
+        "current": {
+          "text": "default",
+          "value": "default"
+        },
         "includeAll": false,
         "name": "datasource",
         "options": [],
@@ -751,23 +2716,38 @@
         "type": "datasource"
       },
       {
-        "current": { "selected": false, "text": "certstream-collectors", "value": "certstream-collectors" },
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "current": {
+          "text": [
+            "certstream-collectors"
+          ],
+          "value": [
+            "certstream-collectors"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "definition": "label_values(ct_entries_processed_total, job)",
-        "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "job",
+        "options": [],
         "query": "label_values(ct_entries_processed_total, job)",
         "refresh": 2,
+        "regexApplyTo": "value",
         "type": "query"
       }
     ]
   },
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "title": "CertStream Collector",
   "uid": "certstream-collector",
-  "version": 1
+  "version": 5,
+  "weekStart": ""
 }

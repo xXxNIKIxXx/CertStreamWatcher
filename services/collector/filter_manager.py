@@ -18,6 +18,7 @@ import hashlib
 from typing import List, Dict, Any
 
 from .config import get_logger
+from .scoring import CertScoring
 
 logger = get_logger("CTStreamService.FilterManager")
 
@@ -34,8 +35,39 @@ class FilterManager:
         self._watch_task: asyncio.Task | None = None
         self._file_hash: str | None = None
         self._poll_interval = int(os.getenv("CT_FILTER_POLL_INTERVAL", "5"))
+        # Scripting config
+        self.scripting_config = self._load_scripting_config()
+        self.scorer = CertScoring(
+            self.scripting_config["keywords"],
+            self.scripting_config["tlds"],
+            self.scripting_config["confusables"]
+        )
         # load from local file first, then try to load persisted value from DB
         self._load_from_file()
+
+    def _load_scripting_config(self) -> dict:
+        # Example config, replace with file or env loading as needed
+        return {
+            "keywords": {
+                'login': 25, 'log-in': 25, 'sign-in': 25, 'signin': 25, 'account': 25,
+                'verification': 25, 'verify': 25, 'webscr': 25, 'password': 25, 'credential': 25,
+                'support': 25, 'activity': 25, 'security': 25, 'update': 25, 'authentication': 25,
+                'authenticate': 25, 'authorize': 25, 'wallet': 25, 'alert': 25, 'purchase': 25,
+                'transaction': 25, 'recover': 25, 'unlock': 25, 'confirm': 20, 'live': 15, 'office': 15,
+                'service': 15, 'manage': 15, 'portal': 15, 'invoice': 15, 'secure': 10, 'customer': 10,
+                'client': 10, 'bill': 10, 'online': 10, 'safe': 10, 'form': 10,
+                # ... add more from your config ...
+            },
+            "tlds": [
+                '.ga', '.gq', '.ml', '.cf', '.tk', '.xyz', '.pw', '.cc', '.club', '.work', '.top',
+                '.support', '.bank', '.info', '.study', '.click', '.country', '.stream', '.gdn',
+                '.mom', '.xin', '.kim', '.men', '.loan', '.download', '.racing', '.online', '.center',
+                '.ren', '.gb', '.win', '.review', '.vip', '.party', '.tech', '.science', '.business'
+            ],
+            "confusables": {
+                '\u2460': '1', '\u2780': '1', '\U0001D7D0': '2', # ... truncated for brevity ...
+            }
+        }
 
     def _load_from_file(self) -> None:
         try:
@@ -183,9 +215,15 @@ class FilterManager:
 
     def should_store(self, cert: Dict[str, Any]) -> bool:
         """
-        Return True if cert should be stored/broadcast, using rules and
-        default_action.
+        Return True if cert should be broadcast/stored, using rules, default_action,
+        and scripting config (keywords, tlds, confusables).
+        Score is always attached to cert dict for DB storage.
+        Filtering can now use scripting_score as a rule field.
         """
+        score = self.scorer.score(cert)
+        cert["scripting_score"] = score
+
+        # Apply rules including scripting_score
         if not self.rules:
             return self.default_action == "allow"
 
@@ -194,6 +232,24 @@ class FilterManager:
             op = rule.get("op") or "contains"
             value = rule.get("value")
             if not field or value is None:
+                continue
+
+            # Special handling for scripting_score (numeric)
+            if field == "scripting_score":
+                try:
+                    val = cert.get("scripting_score", 0)
+                    if op == "gte" and val >= int(value):
+                        return self.default_action != "allow"
+                    if op == "lte" and val <= int(value):
+                        return self.default_action != "allow"
+                    if op == "eq" and val == int(value):
+                        return self.default_action != "allow"
+                    if op == "gt" and val > int(value):
+                        return self.default_action != "allow"
+                    if op == "lt" and val < int(value):
+                        return self.default_action != "allow"
+                except Exception:
+                    continue
                 continue
 
             hay = cert.get(field, "")

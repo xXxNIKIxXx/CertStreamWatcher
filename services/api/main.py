@@ -103,10 +103,12 @@ def create_app() -> FastAPI:
     from .routes.certificates import router as certs_router
     from .routes.stats import router as stats_router
     from .routes.health import router as health_router
+    from .routes.enrich import router as enrich_router
 
     app.include_router(certs_router, prefix="/api/v1")
     app.include_router(stats_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(enrich_router, prefix="/api/v1")
 
     # -- Root redirect to docs ---------------------------------------------
     @app.get("/", include_in_schema=False)

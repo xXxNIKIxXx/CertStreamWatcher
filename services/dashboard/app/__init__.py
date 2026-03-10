@@ -176,7 +176,7 @@ def create_app():
     # Start certstream background task (single-node / dev mode only).
     # In multi-container deployments the collectors run as separate services.
     try:
-        from services.collector.certstream_service import start_certstream
+        from services.collector_old.certstream_service import start_certstream
         socketio.start_background_task(start_certstream, socketio)
         logger.info("CertStream background task started (single-node mode)")
     except ImportError:
