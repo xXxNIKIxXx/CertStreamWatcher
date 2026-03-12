@@ -56,7 +56,6 @@ def _start_event_relay():
         return
     if SINGLE_NODE:
         # Start backend WebSocket relay from collector
-        import threading
         def _ws_relay():
             import asyncio
             import websockets
