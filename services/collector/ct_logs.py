@@ -338,7 +338,7 @@ class CTLogPoller:
 
     async def _broadcast_batch(self, certs: List[dict]) -> None:
         """Publish a batch of certs to Redis (if available) and WebSocket clients."""
-        if self._redis.available:
+        if self._redis is not None and getattr(self._redis, "available", False):
             try:
                 await self._redis.publish_batch(certs)
             except Exception:

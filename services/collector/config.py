@@ -24,13 +24,19 @@ DB_DSN = os.getenv(
     "clickhouse://default:@clickhouse:8123/certstream",
 )
 
-# Redis  (set CT_REDIS_DISABLE=1 to skip Redis entirely)
+
+# SINGLE_NODE disables Redis and sharding, uses only WebSocket for events
+SINGLE_NODE = os.getenv("SINGLE_NODE", "0").strip().lower() in ("1", "true", "yes")
 REDIS_URL = os.getenv("CT_REDIS_URL") or None
-REDIS_DISABLED = os.getenv("CT_REDIS_DISABLE", "0").strip() == "1"
+REDIS_DISABLED = SINGLE_NODE or (os.getenv("CT_REDIS_DISABLE", "0").strip() == "1")
 
 # Worker sharding
-WORKER_INDEX = int(os.getenv("CT_WORKER_INDEX", "0"))
-WORKER_COUNT = int(os.getenv("CT_WORKER_COUNT", "1"))
+if SINGLE_NODE:
+    WORKER_INDEX = 0
+    WORKER_COUNT = 1
+else:
+    WORKER_INDEX = int(os.getenv("CT_WORKER_INDEX", "0"))
+    WORKER_COUNT = int(os.getenv("CT_WORKER_COUNT", "1"))
 
 # Observability
 PROMETHEUS_PORT = 8000

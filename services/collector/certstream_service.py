@@ -24,12 +24,19 @@ class CertStreamService:
     """Initialises all subsystems and runs the CT log poll loop."""
 
     def __init__(self) -> None:
+        from .config import REDIS_DISABLED
         self.metrics = MetricsManager()
         self.db = DatabaseManager(metrics=self.metrics)
-        self.redis = RedisPublisher(metrics=self.metrics)
+        if REDIS_DISABLED:
+            self.redis = None
+        else:
+            self.redis = RedisPublisher(metrics=self.metrics)
         self.ws = WebSocketServer(self.metrics)
         self.filter = FilterManager(db=self.db, redis=self.redis)
-        self.settings_sub = RedisSubscriber(self._on_settings_message)
+        if REDIS_DISABLED:
+            self.settings_sub = None
+        else:
+            self.settings_sub = RedisSubscriber(self._on_settings_message)
         self.poller = CTLogPoller(
             self.metrics, self.db, self.redis, self.ws,
             filter_manager=self.filter,
@@ -84,8 +91,10 @@ class CertStreamService:
         except Exception:
             logger.exception("Could not load persisted settings from DB")
 
-        await self.redis.init()
-        await self.settings_sub.init()
+        if self.redis is not None:
+            await self.redis.init()
+        if self.settings_sub is not None:
+            await self.settings_sub.init()
 
         try:
             await self.filter.start()

@@ -19,7 +19,12 @@ bp = Blueprint(
 
 logger = logging.getLogger(__name__)
 
+
+
+# SINGLE_NODE disables Redis and uses backend relay for WebSocket events
+SINGLE_NODE = os.getenv("SINGLE_NODE", "0").strip().lower() in ("1", "true", "yes")
 REDIS_URL = os.getenv("CT_REDIS_URL") or None
+COLLECTOR_WS_URL = os.getenv("COLLECTOR_WS_URL", "ws://collector:8765")
 
 # In-memory ring buffer for recent certs (fed by Redis subscriber)
 _MAX_BUFFER = 1000
@@ -42,10 +47,53 @@ except ImportError:
     _PROM = False
 
 
-def _start_redis_subscriber():
-    """Background thread: subscribe to ct:certs and fill the ring buffer."""
+
+
+def _start_event_relay():
+    """Start Redis subscriber or WebSocket relay depending on mode."""
     global _subscriber_started
-    if _subscriber_started or not REDIS_URL:
+    if _subscriber_started:
+        return
+    if SINGLE_NODE:
+        # Start backend WebSocket relay from collector
+        import threading
+        def _ws_relay():
+            import asyncio
+            import websockets
+            from app import socketio
+            logger.info(f"Starting WebSocket relay from {COLLECTOR_WS_URL}")
+            async def relay():
+                while True:
+                    try:
+                        async with websockets.connect(COLLECTOR_WS_URL) as ws:
+                            logger.info("Connected to collector WebSocket")
+                            async for msg in ws:
+                                try:
+                                    cert = json.loads(msg)
+                                except Exception:
+                                    continue
+                                with _buffer_lock:
+                                    _cert_buffer.append(cert)
+                                    while len(_cert_buffer) > _MAX_BUFFER:
+                                        _cert_buffer.pop(0)
+                                    if _PROM:
+                                        CERT_BUFFER_SIZE.set(len(_cert_buffer))
+                                try:
+                                    socketio.emit("cert_event", cert)
+                                    if _PROM:
+                                        SOCKETIO_EVENTS_EMITTED.labels(event="cert_event").inc()
+                                except Exception:
+                                    pass
+                    except Exception:
+                        logger.exception("WebSocket relay crashed; retrying in 5s")
+                        await asyncio.sleep(5)
+            asyncio.run(relay())
+        t = threading.Thread(target=_ws_relay, daemon=True)
+        t.start()
+        _subscriber_started = True
+        return
+    # Redis mode
+    if not REDIS_URL:
         return
     _subscriber_started = True
     logger.info("Starting Redis subscriber thread for ct:certs")
@@ -90,10 +138,11 @@ def _start_redis_subscriber():
     t.start()
 
 
+
 @bp.record_once
 def _on_register(_state):
-    """Start the Redis subscriber when the blueprint is registered."""
-    _start_redis_subscriber()
+    """Start the event relay (Redis or WebSocket) when the blueprint is registered."""
+    _start_event_relay()
 
 
 @bp.route("/")
