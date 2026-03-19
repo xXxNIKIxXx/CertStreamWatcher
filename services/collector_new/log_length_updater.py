@@ -1,13 +1,10 @@
 import asyncio
 import aiohttp
 from .config import get_logger, USER_AGENT
-from .database import ProgressWriter
 
 logger = get_logger("LogLengthUpdater")
 
 # Maximum simultaneous in-flight HTTP requests when refreshing log lengths.
-# Raise if you have many logs and want faster refresh cycles; lower to be
-# polite to upstream CT log operators.
 _HTTP_CONCURRENCY = 20
 
 
@@ -57,17 +54,15 @@ class LogLengthUpdater:
 
     async def _update_all(self, normal_logs, tiled_logs):
         """
-        Fetch all log lengths concurrently, bounded by _HTTP_CONCURRENCY, then
-        flush all progress updates in a single DB transaction via ProgressWriter.
+        Fetch all log lengths concurrently (bounded by _HTTP_CONCURRENCY).
+        After each successful fetch, ensure_slices is called so new slices
+        are created automatically when a log grows.
         """
-        # One shared ProgressWriter so every result lands in one flush.
-        writer    = ProgressWriter(self.db, flush_every=len(normal_logs) + len(tiled_logs) + 1)
         semaphore = asyncio.Semaphore(_HTTP_CONCURRENCY)
 
-        # Reuse one aiohttp session with keep-alive across all requests.
         connector = aiohttp.TCPConnector(
             limit=_HTTP_CONCURRENCY,
-            ttl_dns_cache=300,   # cache DNS for 5 minutes
+            ttl_dns_cache=300,
             keepalive_timeout=30,
         )
         timeout = aiohttp.ClientTimeout(total=15, connect=5)
@@ -78,10 +73,10 @@ class LogLengthUpdater:
             headers={"User-Agent": USER_AGENT},
         ) as http:
             tasks = [
-                self._fetch_normal(http, semaphore, log, writer)
+                self._fetch_normal(http, semaphore, log)
                 for log in normal_logs
             ] + [
-                self._fetch_tiled(http, semaphore, log, writer)
+                self._fetch_tiled(http, semaphore, log)
                 for log in tiled_logs
             ]
 
@@ -90,10 +85,7 @@ class LogLengthUpdater:
             else:
                 logger.info("No logs to update.")
 
-        # Single DB round-trip for all gathered results.
-        await writer.flush()
-
-    async def _fetch_normal(self, http, semaphore, log, writer: ProgressWriter):
+    async def _fetch_normal(self, http, semaphore, log):
         sth_url = log.url.rstrip("/") + "/ct/v1/get-sth"
         async with semaphore:
             try:
@@ -102,10 +94,11 @@ class LogLengthUpdater:
                         data      = await resp.json()
                         tree_size = data.get("tree_size")
                         if tree_size is not None:
-                            writer.record(log.id, log_length=tree_size)
                             logger.debug(
                                 f"[normal] {log.url}  tree_size={tree_size}"
                             )
+                            # Create any missing slices for the new range
+                            await self.db.ensure_slices(log.id, tree_size)
                     else:
                         logger.warning(
                             f"[normal] {log.url}  HTTP {resp.status}"
@@ -115,7 +108,7 @@ class LogLengthUpdater:
                     f"[normal] Failed to fetch STH for {log.url}: {exc}"
                 )
 
-    async def _fetch_tiled(self, http, semaphore, log, writer: ProgressWriter):
+    async def _fetch_tiled(self, http, semaphore, log):
         checkpoint_url = log.monitoring_url.rstrip("/") + "/checkpoint"
         async with semaphore:
             try:
@@ -126,11 +119,12 @@ class LogLengthUpdater:
                         if len(lines) >= 2:
                             try:
                                 log_length = int(lines[1])
-                                writer.record(log.id, log_length=log_length)
                                 logger.debug(
                                     f"[tiled] {log.monitoring_url}  "
                                     f"log_length={log_length}"
                                 )
+                                # Create any missing slices for the new range
+                                await self.db.ensure_slices(log.id, log_length)
                             except Exception as parse_err:
                                 logger.error(
                                     f"[tiled] Parse error for "
