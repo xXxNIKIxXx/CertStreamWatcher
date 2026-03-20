@@ -34,6 +34,7 @@ survives.
 """
 
 from .config import get_logger
+from . import metrics
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
@@ -122,7 +123,21 @@ class DatabaseManager:
         def _query():
             with self.Session() as session:
                 return session.query(CTLog).all()
-        return await asyncio.to_thread(_query)
+        try:
+            result = await asyncio.to_thread(_query)
+            return result
+        except Exception as exc:
+            metrics.db_errors_total.labels(operation="get_logs").inc()
+            raise
+
+    def update_pool_metrics(self) -> None:
+        """Push connection-pool gauges. Call periodically from the service loop."""
+        try:
+            pool = self.engine.pool
+            metrics.db_pool_checked_out.set(pool.checkedout())
+            metrics.db_pool_overflow.set(pool.overflow())
+        except Exception:
+            pass
 
     async def close(self):
         def _dispose():
@@ -225,8 +240,16 @@ class DatabaseManager:
                         f"[{log_id}] Inserted {len(to_add)} new slice(s) "
                         f"(log_length={log_length})"
                     )
+                    metrics.slices_created_total.labels(log_id=log_id).inc(len(to_add))
 
-        await asyncio.to_thread(_run)
+        t0 = __import__('time').monotonic()
+        try:
+            await asyncio.to_thread(_run)
+        except Exception as exc:
+            metrics.db_errors_total.labels(operation="ensure_slices").inc()
+            raise
+        finally:
+            metrics.db_ensure_slices_duration_seconds.observe(__import__('time').monotonic() - t0)
 
     async def get_pending_slices(self, log_id: str) -> list[CTLogSlice]:
         """
@@ -262,7 +285,16 @@ class DatabaseManager:
                 ))
             return slices
 
-        return await asyncio.to_thread(_run)
+        import time as _t
+        t0 = _t.monotonic()
+        try:
+            result = await asyncio.to_thread(_run)
+            return result
+        except Exception as exc:
+            metrics.db_errors_total.labels(operation="get_pending_slices").inc()
+            raise
+        finally:
+            metrics.db_get_slices_duration_seconds.observe(_t.monotonic() - t0)
 
     async def update_slice(
         self,
@@ -379,10 +411,20 @@ class SliceWriter:
                 )
                 conn.commit()
 
-        await asyncio.to_thread(_write)
-        logger.debug(
-            f"SliceWriter: flushed {len(snapshot)} slice(s) in one INSERT."
-        )
+        import time as _t
+        t0 = _t.monotonic()
+        try:
+            await asyncio.to_thread(_write)
+            elapsed = _t.monotonic() - t0
+            metrics.db_slice_write_duration_seconds.observe(elapsed)
+            metrics.slice_progress_flushes_total.inc()
+            metrics.slice_progress_rows_total.inc(len(snapshot))
+            logger.debug(
+                f"SliceWriter: flushed {len(snapshot)} slice(s) in one INSERT."
+            )
+        except Exception as exc:
+            metrics.db_errors_total.labels(operation="slice_flush").inc()
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -470,10 +512,13 @@ class CertWriter:
                 conn.execute(self._INSERT_SQL, snapshot)
                 conn.commit()
 
+        import time as _t
+        t0 = _t.monotonic()
         try:
             await asyncio.to_thread(_write)
             logger.debug(f"CertWriter: inserted {len(snapshot)} cert(s).")
         except Exception as exc:
             logger.error(f"CertWriter: flush failed ({len(snapshot)} certs): {exc}")
+            metrics.db_errors_total.labels(operation="cert_flush").inc()
             # Put them back so they aren't silently lost.
             self._pending = snapshot + self._pending

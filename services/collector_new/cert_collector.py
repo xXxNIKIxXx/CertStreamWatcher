@@ -19,7 +19,6 @@ bounded asyncio.Queue and a fixed-size pool of parser workers.
          ▼  await queue.get()
   Parser workers × PARSER_WORKERS
     └─ asyncio.to_thread(parse_entries_bulk | parse_tile_data)
-         └─ _print_certs()
          └─ write_queue.put(parsed)  ← blocks when queue is full
   asyncio.Queue(maxsize=WRITE_QUEUE_MAXSIZE)
          └─ _cert_writer_worker()
@@ -32,14 +31,15 @@ buffer.
 
 import asyncio
 import math
-import time
+import time as _time
 
 import aiohttp
 
-from .models     import CTLog, CTLogSlice
-from .config     import get_logger, BATCH_SIZE, USER_AGENT
-from .database   import SliceWriter, CertWriter
+from .models      import CTLog, CTLogSlice
+from .config      import get_logger, BATCH_SIZE, USER_AGENT
+from .database    import SliceWriter, CertWriter
 from .cert_parser import parse_entries_bulk, parse_tile_data
+from . import metrics
 
 logger = get_logger("CertCollector")
 
@@ -47,22 +47,15 @@ logger = get_logger("CertCollector")
 # Tunables
 # ─────────────────────────────────────────────────────────────────────
 
-QUEUE_MAXSIZE    = 64    # max pending parse batches before fetcher blocks
-PARSER_WORKERS   = 4     # parallel parser coroutines (each uses to_thread)
-HTTP_TIMEOUT     = aiohttp.ClientTimeout(total=30, connect=10)
-FETCH_CONCURRENCY = 4    # parallel in-flight HTTP requests per log
-IDLE_SLEEP       = 5.0   # seconds to wait when fully caught up
-FLUSH_EVERY      = 50    # SliceWriter: DB flush interval (batches)
-
-# How many parsed certs to buffer before flushing to ct_certs.
-CERT_FLUSH_EVERY  = 500
-
-# Max pending cert-write batches before the parser worker blocks.
-# Keeps memory bounded when the DB write is slower than parsing.
-WRITE_QUEUE_MAXSIZE = 32
-
-# Tiled logs: entries per full data tile (fixed by the spec)
-TILE_WIDTH       = 256
+QUEUE_MAXSIZE     = 64    # max pending parse batches before fetcher blocks
+PARSER_WORKERS    = 4     # parallel parser coroutines (each uses to_thread)
+HTTP_TIMEOUT      = aiohttp.ClientTimeout(total=30, connect=10)
+FETCH_CONCURRENCY = 4     # parallel in-flight HTTP requests per log
+IDLE_SLEEP        = 5.0   # seconds to wait when fully caught up
+FLUSH_EVERY       = 50    # SliceWriter: DB flush interval (batches)
+CERT_FLUSH_EVERY  = 500   # CertWriter: rows before flushing to ct_certs
+WRITE_QUEUE_MAXSIZE = 32  # max pending cert-write batches before parser blocks
+TILE_WIDTH        = 256   # tiled logs: entries per full data tile (spec-fixed)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -76,12 +69,10 @@ async def collect_all_logs_dynamic(db, poll_interval: int = 30):
     """
     log_tasks: dict[str, asyncio.Task] = {}
 
-    # One shared parse queue and one shared write queue for ALL logs.
-    # parse_queue: fetchers → parser workers (CPU-bound parsing)
-    # write_queue: parser workers → cert writer worker (DB inserts)
-    # Both are bounded so slow consumers apply backpressure to fast producers.
     parse_queue: asyncio.Queue = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
     write_queue: asyncio.Queue = asyncio.Queue(maxsize=WRITE_QUEUE_MAXSIZE)
+
+    metrics.active_parser_workers.set(PARSER_WORKERS)
     for _ in range(PARSER_WORKERS):
         asyncio.create_task(_parser_worker(parse_queue, write_queue))
     asyncio.create_task(_cert_writer_worker(write_queue, db))
@@ -106,6 +97,13 @@ async def collect_all_logs_dynamic(db, poll_interval: int = 30):
                 log_tasks[log_id].cancel()
                 del log_tasks[log_id]
 
+        # Update live gauges every cycle
+        metrics.parse_queue_depth.set(parse_queue.qsize())
+        metrics.write_queue_depth.set(write_queue.qsize())
+        metrics.active_collector_tasks.set(
+            sum(1 for t in log_tasks.values() if not t.done())
+        )
+
         await asyncio.sleep(poll_interval)
 
 
@@ -116,7 +114,9 @@ async def collect_log_forever(
 ):
     """Drive all pending slices of one log, then poll for new work."""
     writer = SliceWriter(db, flush_every=FLUSH_EVERY) if db is not None else None
-    stats  = {"fetched": 0, "start_time": time.monotonic()}
+    stats  = {"fetched": 0, "start_time": _time.monotonic()}
+
+    log_url_label = log.monitoring_url if log.is_tiled else log.url
 
     connector = aiohttp.TCPConnector(limit=FETCH_CONCURRENCY, ttl_dns_cache=300)
     async with aiohttp.ClientSession(
@@ -126,7 +126,15 @@ async def collect_log_forever(
     ) as http:
         while True:
             made_progress = False
-            slices = await db.get_pending_slices(log.id) if db is not None else []
+
+            t0 = _time.monotonic()
+            try:
+                slices = await db.get_pending_slices(log.id) if db is not None else []
+            except Exception as exc:
+                logger.error(f"[{log_url_label}] get_pending_slices failed: {exc}")
+                metrics.db_errors_total.labels(operation="get_pending_slices").inc()
+                slices = []
+            metrics.db_get_slices_duration_seconds.observe(_time.monotonic() - t0)
 
             for slc in slices:
                 if log.is_tiled:
@@ -165,9 +173,7 @@ async def _drain_slice_normal(
 ):
     """
     Fetch all remaining entries in *slc* via GET /ct/v1/get-entries.
-
     Pipelines up to FETCH_CONCURRENCY requests at a time.
-    Blocks on parse_queue.put() when the queue is full (backpressure).
     """
     semaphore = asyncio.Semaphore(FETCH_CONCURRENCY)
     current   = slc.current_index
@@ -177,28 +183,47 @@ async def _drain_slice_normal(
         await semaphore.acquire()
 
         async def _fetch_and_enqueue(start: int, end: int):
+            t0 = _time.monotonic()
             try:
-                entries = await _fetch_rfc6962_entries(http, log.url, start, end - 1)
+                metrics.fetch_requests_total.labels(
+                    log_url=log.url, fetch_type="rfc6962"
+                ).inc()
+                entries, n_bytes = await _fetch_rfc6962_entries(
+                    http, log.url, start, end - 1
+                )
+                elapsed = _time.monotonic() - t0
+                metrics.fetch_duration_seconds.labels(
+                    log_url=log.url, fetch_type="rfc6962"
+                ).observe(elapsed)
+
                 if entries:
+                    metrics.fetch_success_total.labels(
+                        log_url=log.url, fetch_type="rfc6962"
+                    ).inc()
+                    metrics.entries_fetched_total.labels(log_url=log.url).inc(len(entries))
+                    if n_bytes:
+                        metrics.fetch_bytes_total.labels(
+                            log_url=log.url, fetch_type="rfc6962"
+                        ).inc(n_bytes)
                     if parse_queue is not None:
-                        # ← backpressure: blocks when queue is full
                         await parse_queue.put(("rfc6962", entries, start, log.url))
                     _update_stats(stats, len(entries))
-                    await _persist_progress(
-                        writer, db, log, slc, end
-                    )
+                    await _persist_progress(writer, db, log, slc, end)
                     slc.current_index = end
+                    metrics.log_progress_index.labels(log_url=log.url).set(end)
                     if end >= slc.slice_end:
                         slc.status = "done"
             except Exception as exc:
                 logger.error(f"[{log.url}] normal fetch {start}-{end}: {exc}")
+                metrics.fetch_errors_total.labels(
+                    log_url=log.url, fetch_type="rfc6962", status_code="error"
+                ).inc()
             finally:
                 semaphore.release()
 
         asyncio.create_task(_fetch_and_enqueue(current, batch_end))
         current = batch_end
 
-    # Drain semaphore – wait for all in-flight tasks
     for _ in range(FETCH_CONCURRENCY):
         await semaphore.acquire()
 
@@ -218,37 +243,18 @@ async def _drain_slice_tiled(
 ):
     """
     Fetch remaining entries in *slc* via Static CT data tiles.
-
-    Tile index N covers entries [N*256, N*256+256).
-    A partial tile at the end covers fewer entries.
-
-    URL format:
-      full tile:    <monitoring_url>/tile/data/<N>
-      partial tile: <monitoring_url>/tile/data/<N>.p/<count>
-
-    We determine whether a tile is full or partial by comparing the
-    tile's entry range against slc.slice_end (which equals log_length
-    for the last slice).
+    Tile N covers entries [N*256, N*256+256).
     """
     semaphore = asyncio.Semaphore(FETCH_CONCURRENCY)
-    current   = slc.current_index  # first un-fetched entry index
+    current   = slc.current_index
 
-    # Iterate tile by tile
     while current < slc.slice_end:
         tile_idx        = current // TILE_WIDTH
         tile_start      = tile_idx * TILE_WIDTH
         tile_full_end   = tile_start + TILE_WIDTH
         tile_actual_end = min(tile_full_end, slc.slice_end)
-
-        # Skip entries already collected within this tile
-        if tile_start < current:
-            # We're mid-tile on resume – re-fetch the whole tile but only
-            # advance progress past what we already have.
-            # Simpler than trying to seek within a binary blob.
-            pass
-
-        count_in_tile = tile_actual_end - tile_start
-        is_partial    = count_in_tile < TILE_WIDTH
+        count_in_tile   = tile_actual_end - tile_start
+        is_partial      = count_in_tile < TILE_WIDTH
 
         await semaphore.acquire()
 
@@ -259,25 +265,56 @@ async def _drain_slice_tiled(
             partial_count: int,
             is_part: bool,
         ):
+            fetch_type = "tiled_partial" if is_part else "tiled_full"
+            t0 = _time.monotonic()
             try:
+                metrics.fetch_requests_total.labels(
+                    log_url=log.monitoring_url, fetch_type=fetch_type
+                ).inc()
                 tile_bytes = await _fetch_tiled_data_tile(
                     http, log.monitoring_url, t_idx,
                     partial_count if is_part else None,
                 )
+                elapsed = _time.monotonic() - t0
+                metrics.fetch_duration_seconds.labels(
+                    log_url=log.monitoring_url, fetch_type=fetch_type
+                ).observe(elapsed)
+
                 if tile_bytes:
+                    metrics.fetch_success_total.labels(
+                        log_url=log.monitoring_url, fetch_type=fetch_type
+                    ).inc()
+                    metrics.entries_fetched_total.labels(
+                        log_url=log.monitoring_url
+                    ).inc(partial_count)
+                    metrics.fetch_bytes_total.labels(
+                        log_url=log.monitoring_url, fetch_type=fetch_type
+                    ).inc(len(tile_bytes))
                     if parse_queue is not None:
-                        await parse_queue.put(("tiled", tile_bytes, t_idx, log.monitoring_url))
+                        await parse_queue.put(
+                            ("tiled", tile_bytes, t_idx, log.monitoring_url)
+                        )
                     _update_stats(stats, partial_count)
-                    await _persist_progress(
-                        writer, db, log, slc, t_end
-                    )
+                    await _persist_progress(writer, db, log, slc, t_end)
                     slc.current_index = t_end
+                    metrics.log_progress_index.labels(
+                        log_url=log.monitoring_url
+                    ).set(t_end)
                     if t_end >= slc.slice_end:
                         slc.status = "done"
+                else:
+                    metrics.fetch_errors_total.labels(
+                        log_url=log.monitoring_url,
+                        fetch_type=fetch_type,
+                        status_code="empty_or_skipped",
+                    ).inc()
             except Exception as exc:
-                logger.error(
-                    f"[{log.monitoring_url}] tile fetch {t_idx}: {exc}"
-                )
+                logger.error(f"[{log.monitoring_url}] tile fetch {t_idx}: {exc}")
+                metrics.fetch_errors_total.labels(
+                    log_url=log.monitoring_url,
+                    fetch_type=fetch_type,
+                    status_code="error",
+                ).inc()
             finally:
                 semaphore.release()
 
@@ -300,22 +337,40 @@ async def _fetch_rfc6962_entries(
     log_url: str,
     start: int,
     end: int,   # inclusive
-) -> "list[dict] | None":
-    """GET /ct/v1/get-entries?start=N&end=M  →  list of entry dicts."""
+) -> "tuple[list[dict] | None, int]":
+    """
+    GET /ct/v1/get-entries?start=N&end=M
+    Returns (entries_list_or_None, response_bytes).
+    Records HTTP error metrics itself so callers don't double-count.
+    """
     url = f"{log_url.rstrip('/')}/ct/v1/get-entries"
     try:
         async with http.get(url, params={"start": start, "end": end}) as resp:
+            raw = await resp.read()
             if resp.status != 200:
-                logger.warning(f"[{log_url}] get-entries {start}-{end} → HTTP {resp.status}")
-                return None
-            data = await resp.json(content_type=None)
-            return data.get("entries", [])
+                logger.warning(
+                    f"[{log_url}] get-entries {start}-{end} → HTTP {resp.status}"
+                )
+                metrics.fetch_errors_total.labels(
+                    log_url=log_url, fetch_type="rfc6962",
+                    status_code=str(resp.status),
+                ).inc()
+                return None, 0
+            import json
+            data = json.loads(raw)
+            return data.get("entries", []), len(raw)
     except asyncio.TimeoutError:
         logger.warning(f"[{log_url}] get-entries {start}-{end} → timeout")
-        return None
+        metrics.fetch_errors_total.labels(
+            log_url=log_url, fetch_type="rfc6962", status_code="timeout"
+        ).inc()
+        return None, 0
     except Exception as exc:
         logger.warning(f"[{log_url}] get-entries {start}-{end} → {exc}")
-        return None
+        metrics.fetch_errors_total.labels(
+            log_url=log_url, fetch_type="rfc6962", status_code="error"
+        ).inc()
+        return None, 0
 
 
 async def _fetch_tiled_data_tile(
@@ -326,20 +381,11 @@ async def _fetch_tiled_data_tile(
 ) -> "bytes | None":
     """
     Fetch one data tile from a Static CT log.
-
-    tile_index     – 0-based tile number N
-    partial_count  – if not None, fetch the partial tile with this many entries
-
-    URL structure (c2sp.org/static-ct-api):
-      Full tile:    <monitoring_url>/tile/data/<N>
-      Partial tile: <monitoring_url>/tile/data/<N>.p/<count>
-
-    The <N> component is split into 3-digit path segments for large indices:
-      N=0        → "000"
-      N=1000     → "003/976"  (split as "NNN/NNN")
-      N=1000000  → "003/900/000"
+    Full tile:    <monitoring_url>/tile/data/<path>
+    Partial tile: <monitoring_url>/tile/data/<path>.p/<count>
     """
     path = _tile_path(tile_index)
+    fetch_type = "tiled_partial" if partial_count is not None else "tiled_full"
     if partial_count is not None:
         url = f"{monitoring_url.rstrip('/')}/tile/data/{path}.p/{partial_count}"
     else:
@@ -348,12 +394,10 @@ async def _fetch_tiled_data_tile(
     try:
         async with http.get(url) as resp:
             if resp.status == 404 and partial_count is None:
-                # May be a partial tile that hasn't been promoted to full yet
                 logger.debug(f"[{monitoring_url}] tile {tile_index} → 404, skipping")
                 return None
             if resp.status == 403 and partial_count is not None:
-                # Some logs (e.g. Sycamore) return 403 on the partial tip tile –
-                # this is expected; the caller should skip it.
+                # Sycamore returns 403 on the inaccessible partial tip tile – expected.
                 logger.debug(
                     f"[{monitoring_url}] partial tile {tile_index}.p/{partial_count}"
                     f" → 403 (inaccessible), skipping"
@@ -363,25 +407,32 @@ async def _fetch_tiled_data_tile(
                 logger.warning(
                     f"[{monitoring_url}] tile {tile_index} → HTTP {resp.status} ({url})"
                 )
+                metrics.fetch_errors_total.labels(
+                    log_url=monitoring_url,
+                    fetch_type=fetch_type,
+                    status_code=str(resp.status),
+                ).inc()
                 return None
             return await resp.read()
     except asyncio.TimeoutError:
         logger.warning(f"[{monitoring_url}] tile {tile_index} → timeout")
+        metrics.fetch_errors_total.labels(
+            log_url=monitoring_url, fetch_type=fetch_type, status_code="timeout"
+        ).inc()
         return None
     except Exception as exc:
         logger.warning(f"[{monitoring_url}] tile {tile_index} → {exc}")
+        metrics.fetch_errors_total.labels(
+            log_url=monitoring_url, fetch_type=fetch_type, status_code="error"
+        ).inc()
         return None
 
 
 def _tile_path(n: int) -> str:
     """
     Convert tile index N to the x-prefixed 3-digit-segment URL path.
-
-    Per the c2sp.org/tlog-tiles spec, all leading chunks get an "x" prefix
-    and only the final chunk is left bare.  This is required by logs such as
-    Sycamore (Let's Encrypt) and Tuscolo (Sunlight):
+    Per the c2sp.org/tlog-tiles spec, all leading chunks get an "x" prefix:
       0        → "000"
-      999      → "999"
       1000     → "x001/000"
       604015   → "x604/015"
       1234567  → "x001/x234/567"
@@ -392,7 +443,6 @@ def _tile_path(n: int) -> str:
         chunks.append(s[-3:].zfill(3))
         s = s[:-3]
     chunks.reverse()
-    # All leading chunks get an "x" prefix; the last chunk is bare
     parts = [f"x{c}" for c in chunks[:-1]] + [chunks[-1]]
     return "/".join(parts)
 
@@ -429,7 +479,7 @@ def _update_stats(stats: "dict | None", count: int) -> None:
     if stats is None:
         return
     stats["fetched"] += count
-    elapsed = time.monotonic() - stats["start_time"]
+    elapsed = _time.monotonic() - stats["start_time"]
     if elapsed > 0:
         per_sec = stats["fetched"] / elapsed
         logger.debug(f"fetch rate: {per_sec:.0f}/s  ({stats['fetched']} total)")
@@ -445,33 +495,59 @@ async def _parser_worker(parse_queue: asyncio.Queue, write_queue: asyncio.Queue)
       ("rfc6962", entries_list, start_index, log_url)
       ("tiled",   tile_bytes,   tile_index,  monitoring_url)
 
-    After parsing, pushes (log_url, parsed_list) onto write_queue.
-    If write_queue is full, blocks here – backpressure from slow DB writes
-    flows back through the parser and then to the fetcher.
+    Pushes (log_url, parsed_list) onto write_queue.
+    Blocks on write_queue.put() when it is full – backpressure from DB writes.
     """
     while True:
         item = await parse_queue.get()
         try:
             kind = item[0]
+            t0 = _time.monotonic()
+
             if kind == "rfc6962":
                 _, entries, start_index, log_url = item
                 parsed = await asyncio.to_thread(
                     parse_entries_bulk, entries, start_index
                 )
+                elapsed = _time.monotonic() - t0
+                metrics.parse_duration_seconds.labels(format="rfc6962").observe(elapsed)
+                metrics.parse_batch_size.labels(format="rfc6962").observe(len(entries))
+                failed = len(entries) - len(parsed)
+                if failed > 0:
+                    metrics.parse_errors_total.labels(
+                        log_url=log_url, format="rfc6962"
+                    ).inc(failed)
+
             elif kind == "tiled":
                 _, tile_bytes, tile_index, log_url = item
                 parsed = await asyncio.to_thread(
                     parse_tile_data, tile_bytes, tile_index
                 )
+                elapsed = _time.monotonic() - t0
+                fmt = (
+                    "tiled_sunlight"
+                    if len(tile_bytes) >= 2 and not (tile_bytes[0] == 0 and tile_bytes[1] == 0)
+                    else "tiled_sycamore"
+                )
+                metrics.parse_duration_seconds.labels(format=fmt).observe(elapsed)
+                metrics.parse_batch_size.labels(format=fmt).observe(len(parsed))
+
             else:
                 logger.error(f"Unknown queue item kind: {kind}")
                 parsed = []
 
-            #_print_certs(parsed, log_url)
+            # Per-cert counters
+            for cert in parsed:
+                metrics.certs_parsed_total.labels(
+                    log_url=log_url,
+                    ct_entry_type=cert.get("ct_entry_type", "unknown"),
+                ).inc()
+                issuer_o = metrics.extract_issuer_o(cert.get("issuer", ""))
+                metrics.certs_by_issuer_total.labels(issuer=issuer_o).inc()
 
             if parsed:
-                # ← backpressure: blocks when write_queue is full
                 await write_queue.put((log_url, parsed))
+
         except Exception as exc:
             logger.error(f"Parser worker error: {exc}")
         finally:
@@ -485,37 +561,49 @@ async def _parser_worker(parse_queue: asyncio.Queue, write_queue: asyncio.Queue)
 async def _cert_writer_worker(write_queue: asyncio.Queue, db) -> None:
     """
     Single worker that drains write_queue and persists certs to ct_certs.
-
-    A single writer (not a pool) is intentional: ClickHouse bulk INSERTs
-    are most efficient when batched, and a pool would just fragment batches
-    across multiple concurrent connections for no benefit.
-
-    CertWriter accumulates records in memory and issues one INSERT per
-    CERT_FLUSH_EVERY certs (or when the queue drains between bursts).
+    One writer is intentional: ClickHouse bulk INSERTs are most efficient
+    when batched through a single connection.
     """
     if db is None:
-        # No database – drain the queue silently
         while True:
             await write_queue.get()
             write_queue.task_done()
         return
 
     cert_writer = CertWriter(db, flush_every=CERT_FLUSH_EVERY)
+    last_log_url = ""
 
     while True:
         log_url, certs = await write_queue.get()
+        last_log_url = log_url
         try:
             for cert in certs:
                 cert_writer.record(cert, log_id=log_url)
-            await cert_writer.flush_if_due()
+
+            metrics.cert_writer_pending.set(len(cert_writer._pending))
+
+            if len(cert_writer._pending) >= cert_writer._flush_every:
+                n  = len(cert_writer._pending)
+                t0 = _time.monotonic()
+                await cert_writer.flush()
+                elapsed = _time.monotonic() - t0
+                metrics.db_cert_write_duration_seconds.observe(elapsed)
+                metrics.db_cert_write_batch_size.observe(n)
+                metrics.certs_written_total.labels(log_url=log_url).inc(n)
+                metrics.cert_writer_pending.set(0)
+            else:
+                await cert_writer.flush_if_due()
+
         except Exception as exc:
             logger.error(f"Cert writer worker error: {exc}")
+            metrics.cert_write_errors_total.labels(log_url=log_url).inc()
+            metrics.db_errors_total.labels(operation="cert_flush").inc()
         finally:
             write_queue.task_done()
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Printer
+# Debug printer (disabled by default)
 # ─────────────────────────────────────────────────────────────────────
 
 def _print_certs(certs: "list[dict]", log_url: str) -> None:

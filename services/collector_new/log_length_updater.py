@@ -1,10 +1,11 @@
 import asyncio
+import time as _time
 import aiohttp
 from .config import get_logger, USER_AGENT
+from . import metrics
 
 logger = get_logger("LogLengthUpdater")
 
-# Maximum simultaneous in-flight HTTP requests when refreshing log lengths.
 _HTTP_CONCURRENCY = 20
 
 
@@ -13,14 +14,10 @@ class LogLengthUpdater:
         self.db       = db_manager
         self.interval = interval
         self._running = False
-        logger.info(
-            f"LogLengthUpdater initialized, update interval: {interval}s."
-        )
+        logger.info(f"LogLengthUpdater initialized, update interval: {interval}s.")
 
     async def start(self):
-        logger.info(
-            f"Starting LogLengthUpdater with interval {self.interval}s."
-        )
+        logger.info(f"Starting LogLengthUpdater with interval {self.interval}s.")
         self._running = True
         while self._running:
             normal_logs, tiled_logs = await self._fetch_logs()
@@ -28,10 +25,14 @@ class LogLengthUpdater:
                 f"LogLengthUpdater: updating {len(normal_logs)} normal "
                 f"and {len(tiled_logs)} tiled logs."
             )
+            t0 = _time.monotonic()
             await self._update_all(normal_logs, tiled_logs)
-            logger.info(
-                f"LogLengthUpdater: sleeping for {self.interval}s."
-            )
+            metrics.log_length_update_duration_seconds.observe(_time.monotonic() - t0)
+
+            # Refresh DB connection-pool gauges each cycle (cheap)
+            self.db.update_pool_metrics()
+
+            logger.info(f"LogLengthUpdater: sleeping for {self.interval}s.")
             await asyncio.sleep(self.interval)
 
     async def stop(self):
@@ -53,13 +54,7 @@ class LogLengthUpdater:
         return await asyncio.to_thread(_query)
 
     async def _update_all(self, normal_logs, tiled_logs):
-        """
-        Fetch all log lengths concurrently (bounded by _HTTP_CONCURRENCY).
-        After each successful fetch, ensure_slices is called so new slices
-        are created automatically when a log grows.
-        """
         semaphore = asyncio.Semaphore(_HTTP_CONCURRENCY)
-
         connector = aiohttp.TCPConnector(
             limit=_HTTP_CONCURRENCY,
             ttl_dns_cache=300,
@@ -79,7 +74,6 @@ class LogLengthUpdater:
                 self._fetch_tiled(http, semaphore, log)
                 for log in tiled_logs
             ]
-
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
             else:
@@ -94,19 +88,29 @@ class LogLengthUpdater:
                         data      = await resp.json()
                         tree_size = data.get("tree_size")
                         if tree_size is not None:
-                            logger.debug(
-                                f"[normal] {log.url}  tree_size={tree_size}"
-                            )
-                            # Create any missing slices for the new range
+                            logger.debug(f"[normal] {log.url}  tree_size={tree_size}")
+                            metrics.log_length.labels(log_url=log.url).set(tree_size)
+                            # Compute backlog if we have a progress gauge
+                            try:
+                                progress = metrics.log_progress_index.labels(
+                                    log_url=log.url
+                                )._value.get()
+                                metrics.log_backlog.labels(log_url=log.url).set(
+                                    max(0, tree_size - progress)
+                                )
+                            except Exception:
+                                pass
                             await self.db.ensure_slices(log.id, tree_size)
                     else:
-                        logger.warning(
-                            f"[normal] {log.url}  HTTP {resp.status}"
-                        )
+                        logger.warning(f"[normal] {log.url}  HTTP {resp.status}")
+                        metrics.log_length_update_errors_total.labels(
+                            log_url=log.url, log_type="normal"
+                        ).inc()
             except Exception as exc:
-                logger.error(
-                    f"[normal] Failed to fetch STH for {log.url}: {exc}"
-                )
+                logger.error(f"[normal] Failed to fetch STH for {log.url}: {exc}")
+                metrics.log_length_update_errors_total.labels(
+                    log_url=log.url, log_type="normal"
+                ).inc()
 
     async def _fetch_tiled(self, http, semaphore, log):
         checkpoint_url = log.monitoring_url.rstrip("/") + "/checkpoint"
@@ -120,27 +124,48 @@ class LogLengthUpdater:
                             try:
                                 log_length = int(lines[1])
                                 logger.debug(
-                                    f"[tiled] {log.monitoring_url}  "
-                                    f"log_length={log_length}"
+                                    f"[tiled] {log.monitoring_url}  log_length={log_length}"
                                 )
-                                # Create any missing slices for the new range
+                                metrics.log_length.labels(
+                                    log_url=log.monitoring_url
+                                ).set(log_length)
+                                try:
+                                    progress = metrics.log_progress_index.labels(
+                                        log_url=log.monitoring_url
+                                    )._value.get()
+                                    metrics.log_backlog.labels(
+                                        log_url=log.monitoring_url
+                                    ).set(max(0, log_length - progress))
+                                except Exception:
+                                    pass
                                 await self.db.ensure_slices(log.id, log_length)
                             except Exception as parse_err:
                                 logger.error(
                                     f"[tiled] Parse error for "
                                     f"{log.monitoring_url}: {parse_err}"
                                 )
+                                metrics.log_length_update_errors_total.labels(
+                                    log_url=log.monitoring_url, log_type="tiled"
+                                ).inc()
                         else:
                             logger.warning(
-                                f"[tiled] {log.monitoring_url}  "
-                                f"too few lines in checkpoint"
+                                f"[tiled] {log.monitoring_url}  too few lines in checkpoint"
                             )
+                            metrics.log_length_update_errors_total.labels(
+                                log_url=log.monitoring_url, log_type="tiled"
+                            ).inc()
                     else:
                         logger.warning(
                             f"[tiled] {log.monitoring_url}  HTTP {resp.status}"
                         )
+                        metrics.log_length_update_errors_total.labels(
+                            log_url=log.monitoring_url, log_type="tiled"
+                        ).inc()
             except Exception as exc:
                 logger.error(
                     f"[tiled] Failed to fetch checkpoint for "
                     f"{log.monitoring_url}: {exc}"
                 )
+                metrics.log_length_update_errors_total.labels(
+                    log_url=log.monitoring_url, log_type="tiled"
+                ).inc()
