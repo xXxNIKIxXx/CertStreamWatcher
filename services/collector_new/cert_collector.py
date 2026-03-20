@@ -351,9 +351,17 @@ async def _fetch_tiled_data_tile(
                 # May be a partial tile that hasn't been promoted to full yet
                 logger.debug(f"[{monitoring_url}] tile {tile_index} → 404, skipping")
                 return None
+            if resp.status == 403 and partial_count is not None:
+                # Some logs (e.g. Sycamore) return 403 on the partial tip tile –
+                # this is expected; the caller should skip it.
+                logger.debug(
+                    f"[{monitoring_url}] partial tile {tile_index}.p/{partial_count}"
+                    f" → 403 (inaccessible), skipping"
+                )
+                return None
             if resp.status != 200:
                 logger.warning(
-                    f"[{monitoring_url}] tile {tile_index} → HTTP {resp.status}"
+                    f"[{monitoring_url}] tile {tile_index} → HTTP {resp.status} ({url})"
                 )
                 return None
             return await resp.read()
@@ -367,22 +375,25 @@ async def _fetch_tiled_data_tile(
 
 def _tile_path(n: int) -> str:
     """
-    Convert tile index N to the 3-digit-segment URL path.
+    Convert tile index N to the x-prefixed 3-digit-segment URL path.
 
-    The Static CT spec (c2sp.org/tlog-tiles) encodes tile indices as
-    a sequence of 3-digit decimal path components where EVERY segment
-    (including the leading one) is zero-padded to exactly 3 digits:
+    Per the c2sp.org/tlog-tiles spec, all leading chunks get an "x" prefix
+    and only the final chunk is left bare.  This is required by logs such as
+    Sycamore (Let's Encrypt) and Tuscolo (Sunlight):
       0        → "000"
-      1        → "001"
       999      → "999"
-      1000     → "001/000"
-      999999   → "999/999"
-      1000000  → "001/000/000"
+      1000     → "x001/000"
+      604015   → "x604/015"
+      1234567  → "x001/x234/567"
     """
-    digits = str(n)
-    pad    = (-len(digits)) % 3   # leading zeros to reach a multiple of 3
-    digits = "0" * pad + digits
-    parts  = [digits[i:i+3] for i in range(0, len(digits), 3)]
+    s = f"{n:03d}"
+    chunks: list[str] = []
+    while s:
+        chunks.append(s[-3:].zfill(3))
+        s = s[:-3]
+    chunks.reverse()
+    # All leading chunks get an "x" prefix; the last chunk is bare
+    parts = [f"x{c}" for c in chunks[:-1]] + [chunks[-1]]
     return "/".join(parts)
 
 
@@ -456,7 +467,7 @@ async def _parser_worker(parse_queue: asyncio.Queue, write_queue: asyncio.Queue)
                 logger.error(f"Unknown queue item kind: {kind}")
                 parsed = []
 
-            _print_certs(parsed, log_url)
+            #_print_certs(parsed, log_url)
 
             if parsed:
                 # ← backpressure: blocks when write_queue is full
