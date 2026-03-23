@@ -4,7 +4,7 @@ aiosignal==1.4.0
 attrs==25.4.0
 bidict==0.23.1
 blinker==1.9.0
-cbor2==5.8.0
+cbor2==5.9.0
 certstream==1.12
 cffi==2.0.0
 click==8.3.1
