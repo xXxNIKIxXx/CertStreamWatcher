@@ -289,72 +289,74 @@ async def _drain_slice_tiled(
         count_in_tile   = tile_actual_end - tile_start
         is_partial      = count_in_tile < TILE_WIDTH
 
-        await semaphore.acquire()
 
-        async def _fetch_tile_and_enqueue(
-            t_idx: int,
-            t_start: int,
-            t_end: int,
-            partial_count: int,
-            is_part: bool,
-        ):
-            fetch_type = "tiled_partial" if is_part else "tiled_full"
-            t0 = _time.monotonic()
-            try:
-                metrics.fetch_requests_total.labels(
-                    log_url=log.monitoring_url, fetch_type=fetch_type
-                ).inc()
-                tile_bytes = await _fetch_tiled_data_tile(
-                    http, log.monitoring_url, t_idx,
-                    partial_count if is_part else None,
-                )
-                elapsed = _time.monotonic() - t0
-                metrics.fetch_duration_seconds.labels(
-                    log_url=log.monitoring_url, fetch_type=fetch_type
-                ).observe(elapsed)
+        # Skip partial tiles: only fetch full tiles
+        if not is_partial:
+            await semaphore.acquire()
 
-                if tile_bytes:
-                    metrics.fetch_success_total.labels(
+            async def _fetch_tile_and_enqueue(
+                t_idx: int,
+                t_start: int,
+                t_end: int,
+                partial_count: int,
+                is_part: bool,
+            ):
+                fetch_type = "tiled_full"
+                t0 = _time.monotonic()
+                try:
+                    metrics.fetch_requests_total.labels(
                         log_url=log.monitoring_url, fetch_type=fetch_type
                     ).inc()
-                    metrics.entries_fetched_total.labels(
-                        log_url=log.monitoring_url
-                    ).inc(partial_count)
-                    metrics.fetch_bytes_total.labels(
+                    tile_bytes = await _fetch_tiled_data_tile(
+                        http, log.monitoring_url, t_idx, None
+                    )
+                    elapsed = _time.monotonic() - t0
+                    metrics.fetch_duration_seconds.labels(
                         log_url=log.monitoring_url, fetch_type=fetch_type
-                    ).inc(len(tile_bytes))
-                    if parse_queue is not None:
-                        await parse_queue.put(
-                            ("tiled", tile_bytes, t_idx, log.monitoring_url)
-                        )
-                    _update_stats(stats, partial_count)
-                    await _persist_progress(writer, db, log, slc, t_end)
-                    slc.current_index = t_end
-                    metrics.log_progress_index.labels(
-                        log_url=log.monitoring_url
-                    ).set(t_end)
-                    if t_end >= slc.slice_end:
-                        slc.status = "done"
-                else:
+                    ).observe(elapsed)
+
+                    if tile_bytes:
+                        metrics.fetch_success_total.labels(
+                            log_url=log.monitoring_url, fetch_type=fetch_type
+                        ).inc()
+                        metrics.entries_fetched_total.labels(
+                            log_url=log.monitoring_url
+                        ).inc(partial_count)
+                        metrics.fetch_bytes_total.labels(
+                            log_url=log.monitoring_url, fetch_type=fetch_type
+                        ).inc(len(tile_bytes))
+                        if parse_queue is not None:
+                            await parse_queue.put(
+                                ("tiled", tile_bytes, t_idx, log.monitoring_url)
+                            )
+                        _update_stats(stats, partial_count)
+                        await _persist_progress(writer, db, log, slc, t_end)
+                        slc.current_index = t_end
+                        metrics.log_progress_index.labels(
+                            log_url=log.monitoring_url
+                        ).set(t_end)
+                        if t_end >= slc.slice_end:
+                            slc.status = "done"
+                    else:
+                        metrics.fetch_errors_total.labels(
+                            log_url=log.monitoring_url,
+                            fetch_type=fetch_type,
+                            status_code="empty_or_skipped",
+                        ).inc()
+                except Exception as exc:
+                    logger.error(f"[{log.monitoring_url}] tile fetch {t_idx}: {exc}")
                     metrics.fetch_errors_total.labels(
                         log_url=log.monitoring_url,
                         fetch_type=fetch_type,
-                        status_code="empty_or_skipped",
+                        status_code="error",
                     ).inc()
-            except Exception as exc:
-                logger.error(f"[{log.monitoring_url}] tile fetch {t_idx}: {exc}")
-                metrics.fetch_errors_total.labels(
-                    log_url=log.monitoring_url,
-                    fetch_type=fetch_type,
-                    status_code="error",
-                ).inc()
-            finally:
-                semaphore.release()
+                finally:
+                    semaphore.release()
 
-        asyncio.create_task(_fetch_tile_and_enqueue(
-            tile_idx, tile_start, tile_actual_end,
-            count_in_tile, is_partial,
-        ))
+            asyncio.create_task(_fetch_tile_and_enqueue(
+                tile_idx, tile_start, tile_actual_end,
+                count_in_tile, is_partial,
+            ))
         current = tile_actual_end
 
     for _ in range(FETCH_CONCURRENCY):
