@@ -97,34 +97,31 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.path.startswith('/ct_log_sources/operators') %}active{% endif %}"
-                        href="/ct_log_sources/operators"><i class="bi bi-diagram-3 me-2"></i>Log Operators</a>
+                        href="{{ url_for('ct_log_sources.list_operators') }}"><i class="bi bi-diagram-3 me-2"></i>Log Operators</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.path.startswith('/ct_log_sources/logs') %}active{% endif %}"
-                        href="/ct_log_sources/logs"><i class="bi bi-list-columns-reverse me-2"></i>Logs</a>
+                        href="{{ url_for('ct_log_sources.list_logs') }}"><i class="bi bi-list-columns-reverse me-2"></i>Logs</a>
                 </li>
                 <li class="nav-item">
 
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.path.startswith('/query') %}active{% endif %}" href="/query"><i
+                    <a class="nav-link {% if request.path.startswith('/query') %}active{% endif %}" href="{{ url_for('query.index') }}"><i
                             class="bi bi-terminal me-2"></i>Query</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.path.startswith('/settings') %}active{% endif %}" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a>
+                    <a class="nav-link {% if request.path.startswith('/filters') %}active{% endif %}" href="{{ url_for('filters.filters_page') }}"><i class="bi bi-gear me-2"></i>Filters</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.path.startswith('/monitoring') %}active{% endif %}"
-                        href="/monitoring"><i class="bi bi-heart-pulse me-2"></i>Health</a>
+                        href="{{ url_for('monitoring.index') }}"><i class="bi bi-heart-pulse me-2"></i>Health</a>
                 </li>
             </ul>
             <div class="mt-auto pt-3 border-top">
                 <div class="d-flex align-items-center justify-content-between mb-2">
                     <small class="text-body-secondary" id="sidebar-clock"></small>
                     <div class="d-flex gap-2 align-items-center">
-                        <a class="btn btn-sm btn-outline-secondary" href="/settings" title="Settings">
-                            <i class="bi bi-gear" style="font-size:.85rem"></i>
-                        </a>
                         <button class="btn btn-sm btn-outline-secondary border-0" onclick="toggleTheme()"
                             title="Toggle theme" id="theme-btn">
                             <i class="bi bi-moon-fill" id="theme-icon" style="font-size:.85rem"></i>

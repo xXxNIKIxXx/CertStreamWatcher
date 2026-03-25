@@ -21,7 +21,6 @@
             <th scope="col">Current Index</th>
             <th scope="col">Log Length</th>
             <th scope="col">Progress</th>
-            <th scope="col">Status</th>
             <th scope="col">Actions</th>
         </tr>
     </thead>
@@ -64,7 +63,6 @@
             {% else %}
                 <td><a href="{{ row[3] }}/ct/v1/get-sth">{{ row[9] }}</a></td>
             {% endif %}
-            <td>{{ row[10] }}</td>
             <td>
                 <a href="{{ url_for('ct_log_sources.edit_log', log_id=row[0]) }}" class="btn btn-outline-info btn-sm"><i class="bi bi-pencil"></i> Edit</a>
                 <form action="{{ url_for('ct_log_sources.delete_log', log_id=row[0]) }}" method="post" style="display:inline;">

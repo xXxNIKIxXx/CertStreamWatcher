@@ -204,12 +204,7 @@ def list_logs():
     # Compute progress percentage for each log
     logs = []
     for row in rows:
-        total_parsed = row[8] or 0
-        total_length = row[9] or 0
-        progress = 0.0
-        if total_length > 0:
-            progress = (total_parsed / total_length) * 100
-        logs.append(row[:10] + (progress,) + row[10:])
+        logs.append(row)
     return render_template("ct_log_sources/logs_list.html", logs=logs)
 
 @bp.route("/logs/add", methods=["GET", "POST"])
