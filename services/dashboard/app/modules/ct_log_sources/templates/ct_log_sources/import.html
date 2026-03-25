@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Import Operators and Logs from JSON</h2>
+<form method="post" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="json_file">JSON File</label>
+        <input type="file" class="form-control" name="json_file" id="json_file" accept="application/json" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Import</button>
+    <a href="{{ url_for('ct_log_sources.list_operators') }}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %}

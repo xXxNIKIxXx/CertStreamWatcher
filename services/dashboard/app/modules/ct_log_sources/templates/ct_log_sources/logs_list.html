@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>CT Logs</h2>
+    <div>
+        <a href="{{ url_for('ct_log_sources.import_json') }}" class="btn btn-success me-2"><i class="bi bi-upload"></i> Import</a>
+        <a href="{{ url_for('ct_log_sources.add_log') }}" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Add Log</a>
+    </div>
+</div>
+<div class="table-responsive">
+<table class="table table-hover table-striped align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Operator</th>
+            <th scope="col">URL</th>
+            <th scope="col">MMD</th>
+            <th scope="col">State</th>
+            <th scope="col">Interval Start</th>
+            <th scope="col">Interval End</th>
+            <th scope="col">Current Index</th>
+            <th scope="col">Log Length</th>
+            <th scope="col">Progress</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for row in logs %}
+        <tr>
+            <td>
+                {# Remove operator name from log description #}
+                {{ row[1]|replace(row[2], '')|trim }}{% if row[1]|length > 40 %}…{% endif %}
+                {% if row[11] == 1 %}
+                    <span class="badge bg-info text-dark ms-1" title="Tiled Log">Tiled</span>
+                {% else %}
+                    <span class="badge badge-secondary">Not Tiled</span>
+                {% endif %}
+            </td>
+            <td><strong>{{ row[2] }}</strong></td>
+            <td><a href="{{ row[3] }}" target="_blank">{{ row[3][:24] }}{% if row[3]|length > 24 %}…{% endif %}</a></td>
+            <td>{{ row[4] }}</td>
+            <td><pre class="mb-0" style="font-size:0.85em;white-space:pre-wrap;max-width:120px;overflow-x:auto;">{{ row[5][:40] }}{% if row[5]|length > 40 %}…{% endif %}</pre></td>
+            <td>{{ row[6].strftime('%Y-%m-%d') if row[6] is not none else '' }}</td>
+            <td>{{ row[7].strftime('%Y-%m-%d') if row[7] is not none else '' }}</td>
+            <td>{{ row[8] }}</td>
+            {# Progress calculation and color #}
+            {% set current_index = row[8] or 0 %}
+            {% set log_length = row[9] or 0 %}
+            {% if log_length > 0 %}
+                {% set percent = (current_index / log_length * 100) | round(1) %}
+            {% else %}
+                {% set percent = 0 %}
+            {% endif %}
+            {% set red = 255 - (percent * 2.55)|int %}
+            {% set green = (percent * 2.55)|int %}
+            <td>
+                <span style="font-weight:bold; color: rgb({{ red }},{{ green }},0);">
+                    {{ percent }}%
+                </span>
+            </td>
+            {% if row[11] == 1 %}
+                <td><a href="{{ row[3] }}/checkpoint">{{ row[9] }}</a></td>
+            {% else %}
+                <td><a href="{{ row[3] }}/ct/v1/get-sth">{{ row[9] }}</a></td>
+            {% endif %}
+            <td>{{ row[10] }}</td>
+            <td>
+                <a href="{{ url_for('ct_log_sources.edit_log', log_id=row[0]) }}" class="btn btn-outline-info btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+                <form action="{{ url_for('ct_log_sources.delete_log', log_id=row[0]) }}" method="post" style="display:inline;">
+                    <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this log?');"><i class="bi bi-trash"></i> Delete</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

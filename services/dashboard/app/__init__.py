@@ -14,10 +14,9 @@ from importlib import import_module
 from pathlib import Path
 
 # Real-time socket server
-from flask_socketio import SocketIO
 
-# SocketIO instance (initialized without app for factory pattern)
-socketio = SocketIO(cors_allowed_origins="*")
+
+
 
 # Third-party imports
 from flask import (
@@ -30,6 +29,8 @@ from .core.errors import register_error_handlers
 from .core.logging import configure_logging
 from .core.metrics import init_metrics
 from .modules.loader import register_blueprints
+
+from app.core import clickhouse 
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,44 @@ def get_config_class(env_name):
     except (ModuleNotFoundError, AttributeError):
         raise ValueError(f"No config class found for environment '{env_name}'")
 
+# Table definitions for operator/log structure
+_CREATE_OPERATORS_SQL = """
+CREATE TABLE IF NOT EXISTS ct_log_operators (
+    id UUID DEFAULT generateUUIDv4(),
+    name String,
+    email Array(String),
+    added_at DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = MergeTree()
+ORDER BY (added_at, id)
+PARTITION BY toYYYYMM(added_at)
+"""
+
+_CREATE_LOGS_SQL = """
+CREATE TABLE IF NOT EXISTS ct_logs (
+    id UUID DEFAULT generateUUIDv4(),
+    operator_id UUID,
+    description String,
+    log_id String,
+    key String,
+    url String,
+    mmd Int32,
+    state String,
+    temporal_interval_start DateTime64(3, 'UTC'),
+    temporal_interval_end DateTime64(3, 'UTC'),
+    current_index UInt64 DEFAULT 0,
+    log_length UInt64 DEFAULT 0,
+    status String,
+    added_at DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = MergeTree()
+ORDER BY (added_at, id)
+PARTITION BY toYYYYMM(added_at)
+"""
+
+def ensure_tables():
+    client = clickhouse.get_client()
+    client.command(_CREATE_OPERATORS_SQL)
+    client.command(_CREATE_LOGS_SQL)
+
 
 def create_app():
     """
@@ -74,16 +113,8 @@ def create_app():
         Flask: A configured Flask application instance.
     """
     app = Flask(__name__)
-    # Initialize SocketIO with the flask app
-    # Use gevent async mode and Redis message queue so that
-    # the background Redis subscriber thread can emit to all
-    # connected Socket.IO clients.
-    redis_url = os.getenv("CT_REDIS_URL") or None
-    socketio.init_app(
-        app,
-        async_mode="gevent",
-        message_queue=redis_url,
-    )
+
+    
     configure_logging(
         app,
         level=os.getenv("LOG_LEVEL", "Info"),
@@ -173,19 +204,7 @@ def create_app():
     except Exception:
         logger.exception("Failed to import module models for migrations")
 
-    # Start certstream background task (single-node / dev mode only).
-    # In multi-container deployments the collectors run as separate services.
-    try:
-        from services.collector_old.certstream_service import start_certstream
-        socketio.start_background_task(start_certstream, socketio)
-        logger.info("CertStream background task started (single-node mode)")
-    except ImportError:
-        logger.info(
-            "Collector package not available in this container; "
-            "collectors run as separate services."
-        )
-    except Exception:
-        logger.exception("Failed to start CertStream background task")
+
 
     # logger.info("Initializing database...")
     # migrate.init_app(app, db, render_as_batch=True)
@@ -199,5 +218,12 @@ def create_app():
     #     logger.info("Database tables ensured.")
 
     register_error_handlers(app)
+
+    with app.app_context():
+        try:
+            ensure_tables()
+            logger.info("Database tables ensured.")
+        except Exception:
+            logger.exception("Failed to ensure database tables")
 
     return app

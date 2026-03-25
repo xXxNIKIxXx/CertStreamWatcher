@@ -47,15 +47,7 @@
 
 <!-- Quick links -->
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <a href="/certs" class="card text-decoration-none h-100">
-      <div class="card-body">
-        <i class="bi bi-file-earmark-lock text-primary me-2"></i>
-        <strong>Live Certificates</strong>
-        <p class="text-body-secondary small mb-0 mt-1">Real-time certificate stream</p>
-      </div>
-    </a>
-  </div>
+      <!-- Live Certificates card removed -->
   <div class="col-md-4">
     <a href="/query" class="card text-decoration-none h-100">
       <div class="card-body">
@@ -80,7 +72,7 @@
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span>Recent Certificates</span>
-    <a href="/certs" class="btn btn-sm btn-outline-primary">View all</a>
+
   </div>
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 align-middle">
@@ -123,7 +115,7 @@ function loadOverview() {
 }
 
 function loadRecent() {
-  fetch('/certs/api/recent?limit=10')
+  fetch('/api/recent?limit=10')
     .then(r => r.json())
     .then(data => {
       const tbody = document.getElementById('recent-certs');

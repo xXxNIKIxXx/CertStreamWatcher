@@ -1,3 +1,4 @@
+
 """Home / overview dashboard page."""
 
 import logging
@@ -27,6 +28,44 @@ try:
 except ImportError:
     _PROM = False
 
+
+@bp.route("/api/recent")
+def api_recent():
+    """Return the 10 most recent certificates for the dashboard."""
+    certs = []
+    if _PROM:
+        DB_QUERY_COUNT.labels(endpoint="dashboard.api_recent").inc()
+    t0 = time.monotonic()
+    try:
+        client = clickhouse.get_client()
+        try:
+            rows = client.query(
+                "SELECT ts, subject, issuer, dns_names FROM ct_certs ORDER BY ts DESC LIMIT 10"
+            ).result_rows
+            for row in rows:
+                certs.append({
+                    "timestamp": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]),
+                    "subject": row[1],
+                    "issuer": row[2],
+                    "dns_names": row[3] if isinstance(row[3], list) else (row[3].split(",") if row[3] else []),
+                })
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+        if _PROM:
+            DB_QUERY_DURATION.labels(endpoint="dashboard.api_recent").observe(
+                time.monotonic() - t0
+            )
+    except Exception as exc:
+        logger.debug("Recent certs query failed: %s", exc)
+        if _PROM:
+            DB_QUERY_ERRORS.labels(endpoint="dashboard.api_recent").inc()
+            DB_QUERY_DURATION.labels(endpoint="dashboard.api_recent").observe(
+                time.monotonic() - t0
+            )
+    return jsonify({"certs": certs})
 
 @bp.route("/")
 def index():

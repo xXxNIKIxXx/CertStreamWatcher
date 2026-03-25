@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Add CT Log</h2>
+<form method="post">
+    <div class="form-group">
+        <label for="operator_id">Operator</label>
+        <select class="form-control" name="operator_id" id="operator_id" required>
+            {% for op in operators %}
+            <option value="{{ op[0] }}">{{ op[1] }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="description">Description</label>
+        <input type="text" class="form-control" name="description" id="description" required>
+    </div>
+    <div class="form-group">
+        <label for="log_id">Log ID</label>
+        <input type="text" class="form-control" name="log_id" id="log_id" required>
+    </div>
+    <div class="form-group">
+        <label for="key">Key</label>
+        <input type="text" class="form-control" name="key" id="key">
+    </div>
+    <div class="form-group">
+        <label for="url">URL</label>
+        <input type="text" class="form-control" name="url" id="url">
+    </div>
+    <div class="form-group">
+        <label for="mmd">MMD</label>
+        <input type="number" class="form-control" name="mmd" id="mmd">
+    </div>
+    <div class="form-group">
+        <label for="state">State (JSON)</label>
+        <input type="text" class="form-control" name="state" id="state">
+    </div>
+    <div class="form-group">
+        <label for="temporal_interval_start">Interval Start (ISO8601)</label>
+        <input type="text" class="form-control" name="temporal_interval_start" id="temporal_interval_start">
+    </div>
+    <div class="form-group">
+        <label for="temporal_interval_end">Interval End (ISO8601)</label>
+        <input type="text" class="form-control" name="temporal_interval_end" id="temporal_interval_end">
+    </div>
+    <div class="form-group">
+        <label for="current_index">Current Index</label>
+        <input type="number" class="form-control" name="current_index" id="current_index" value="0" disabled>
+        <small class="form-text text-muted">This value is managed automatically.</small>
+    </div>
+    <div class="form-group">
+        <label for="log_length">Log Length</label>
+        <input type="number" class="form-control" name="log_length" id="log_length" value="0" disabled>
+        <small class="form-text text-muted">This value is managed automatically.</small>
+    </div>
+    <div class="form-group form-check">
+        <input type="checkbox" class="form-check-input" name="is_tiled" id="is_tiled" onchange="toggleTiledFields(this)">
+        <label class="form-check-label" for="is_tiled">Tiled Log</label>
+    </div>
+    <div id="tiled-fields" style="display:none">
+        <div class="form-group">
+            <label for="submission_url">Submission URL</label>
+            <input type="text" class="form-control" name="submission_url" id="submission_url">
+        </div>
+        <div class="form-group">
+            <label for="monitoring_url">Monitoring URL</label>
+            <input type="text" class="form-control" name="monitoring_url" id="monitoring_url">
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="status">Status</label>
+        <input type="text" class="form-control" name="status" id="status" value="active">
+    </div>
+    <script>
+    function toggleTiledFields(cb) {
+        document.getElementById('tiled-fields').style.display = cb.checked ? '' : 'none';
+    }
+    </script>
+    <button type="submit" class="btn btn-primary">Add</button>
+    <a href="{{ url_for('ct_log_sources.list_logs') }}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %}

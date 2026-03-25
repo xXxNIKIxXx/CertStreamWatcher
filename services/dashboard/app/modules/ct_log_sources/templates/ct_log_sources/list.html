@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>CT Log Sources</h2>
+<a href="{{ url_for('ct_log_sources.add_log_source') }}" class="btn btn-primary mb-3">Add Log Source</a>
+<table class="table table-bordered table-striped">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>URL</th>
+            <th>Status</th>
+            <th>Enabled</th>
+            <th>Added At</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for row in log_sources %}
+        <tr>
+            <td>{{ row[0] }}</td>
+            <td>{{ row[2] }}</td>
+            <td>{{ row[1] }}</td>
+            <td>{{ row[9] }}</td>
+            <td>{{ 'Yes' if row[3] else 'No' }}</td>
+            <td>{{ row[4] }}</td>
+            <td>
+                <form action="{{ url_for('ct_log_sources.pause_log_source', log_id=row[0]) }}" method="post" style="display:inline;">
+                    <button class="btn btn-warning btn-sm" {% if not row[3] %}disabled{% endif %}>Pause</button>
+                </form>
+                <form action="{{ url_for('ct_log_sources.unpause_log_source', log_id=row[0]) }}" method="post" style="display:inline;">
+                    <button class="btn btn-success btn-sm" {% if row[3] %}disabled{% endif %}>Unpause</button>
+                </form>
+                <a href="{{ url_for('ct_log_sources.edit_log_source', log_id=row[0]) }}" class="btn btn-info btn-sm">Edit</a>
+                <form action="{{ url_for('ct_log_sources.delete_log_source', log_id=row[0]) }}" method="post" style="display:inline;">
+                    <button class="btn btn-danger btn-sm" onclick="return confirm('Delete this log source?');">Delete</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

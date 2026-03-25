@@ -96,8 +96,15 @@
                         href="/"><i class="bi bi-speedometer2 me-2"></i>Overview</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.path.startswith('/certs') %}active{% endif %}" href="/certs"><i
-                            class="bi bi-file-earmark-lock me-2"></i>Live Certs</a>
+                    <a class="nav-link {% if request.path.startswith('/ct_log_sources/operators') %}active{% endif %}"
+                        href="/ct_log_sources/operators"><i class="bi bi-diagram-3 me-2"></i>Log Operators</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.path.startswith('/ct_log_sources/logs') %}active{% endif %}"
+                        href="/ct_log_sources/logs"><i class="bi bi-list-columns-reverse me-2"></i>Logs</a>
+                </li>
+                <li class="nav-item">
+
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.path.startswith('/query') %}active{% endif %}" href="/query"><i
@@ -128,9 +135,21 @@
         </nav>
 
         <div class="flex-grow-1" style="min-height:100vh">
-            <div class="container-fluid p-4">
-                {% block content %}{% endblock %}
-            </div>
+                        <div class="container-fluid p-4">
+                                {% with messages = get_flashed_messages(with_categories=true) %}
+                                    {% if messages %}
+                                        <div class="flashes">
+                                            {% for category, message in messages %}
+                                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                                    {{ message }}
+                                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                {% endwith %}
+                                {% block content %}{% endblock %}
+                        </div>
         </div>
     </div>
 

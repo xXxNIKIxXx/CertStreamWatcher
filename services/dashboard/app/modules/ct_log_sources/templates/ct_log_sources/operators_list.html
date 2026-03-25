@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>CT Log Operators</h2>
+    <div>
+        <a href="{{ url_for('ct_log_sources.import_json') }}" class="btn btn-success me-2"><i class="bi bi-upload"></i> Import</a>
+        <a href="{{ url_for('ct_log_sources.add_operator') }}" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Add Operator</a>
+    </div>
+</div>
+<div class="table-responsive">
+<table class="table table-hover table-striped align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Email(s)</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for row in operators %}
+        <tr>
+            <td><strong>{{ row[1] }}</strong></td>
+            <td>{{ row[2]|join('<br>')|safe }}</td>
+            <td>
+                <a href="{{ url_for('ct_log_sources.edit_operator', op_id=row[0]) }}" class="btn btn-outline-info btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+                <form action="{{ url_for('ct_log_sources.delete_operator', op_id=row[0]) }}" method="post" style="display:inline;">
+                    <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this operator?');"><i class="bi bi-trash"></i> Delete</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}
