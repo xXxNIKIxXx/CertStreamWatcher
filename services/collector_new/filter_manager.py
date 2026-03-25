@@ -351,7 +351,8 @@ class FilterManager:
 
         with self._lock:
             self._default_action = default_action
-            self._write_rules    = [r for r in rules if self._valid_rule(r)]
+            # Only include rules where enabled is not set to false (default to enabled)
+            self._write_rules = [r for r in rules if self._valid_rule(r) and r.get('enabled', True)]
 
     @staticmethod
     def _valid_rule(rule: Any) -> bool:
