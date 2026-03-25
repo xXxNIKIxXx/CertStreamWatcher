@@ -1,321 +1,347 @@
-"""Prometheus metrics definitions used by the CT collector.
+"""
+metrics.py – Centralised Prometheus metrics for the CertStream collector.
 
-This module provides a thin wrapper around `prometheus_client` so the
-collector can run even when the library is not installed. When the
-library is missing, no-op metrics are registered so callers can emit
-metrics without guard logic.
+All metric objects live here so every module imports from one place.
+Import this module before starting any workers so all counters are
+registered before the HTTP server exposes them.
+
+Naming convention:  ct_<subsystem>_<measurement>_<unit>
 """
 
-from .config import get_logger, PROMETHEUS_PORT
+from prometheus_client import Counter, Gauge, Histogram, Info
 
-logger = get_logger("CTStreamService.Metrics")
+# ─────────────────────────────────────────────────────────────────────
+# Service info
+# ─────────────────────────────────────────────────────────────────────
 
-try:
-    from prometheus_client import (
-        start_http_server,
-        Counter,
-        Gauge,
-        Histogram,
-        Info,
-    )
-
-    PROM_AVAILABLE = True
-except Exception:
-    PROM_AVAILABLE = False
+service_info = Info(
+    "ct_collector",
+    "Static build/version information about the collector service",
+)
+service_info.info({"version": "1.0.0", "component": "certstream-collector"})
 
 
-class _NoopMetric:
-    """No-op stand-in when prometheus_client is not installed."""
+# ─────────────────────────────────────────────────────────────────────
+# Certificate ingestion – volume & types
+# ─────────────────────────────────────────────────────────────────────
 
-    def inc(self, *_a, **_kw):
-        pass
+# Certs that finished parsing and were enqueued for DB write.
+# Labels: log_url, ct_entry_type (x509_entry | precert_entry)
+certs_parsed_total = Counter(
+    "ct_certs_parsed_total",
+    "Total certificates successfully parsed, by log and entry type",
+    ["log_url", "ct_entry_type"],
+)
 
-    def dec(self, *_a, **_kw):
-        pass
+# Certs written into ClickHouse ct_certs.
+# Labels: log_url
+certs_written_total = Counter(
+    "ct_certs_written_total",
+    "Total certificates written to ClickHouse",
+    ["log_url"],
+)
 
-    def set(self, *_a, **_kw):
-        pass
+# Failed DB writes (CertWriter.flush() threw an exception).
+# Labels: log_url
+cert_write_errors_total = Counter(
+    "ct_cert_write_errors_total",
+    "Total certificate batch write failures",
+    ["log_url"],
+)
 
-    def labels(self, **_kw):
-        return self
+# Top CAs by O= field in the issuer DN.
+# Labels: issuer  (e.g. "Let's Encrypt", "DigiCert Inc")
+certs_by_issuer_total = Counter(
+    "ct_certs_by_issuer_total",
+    "Total certificates by issuer organisation (O= from issuer DN)",
+    ["issuer"],
+)
 
-    def time(self):
-        """Return a context manager that does nothing."""
-        import contextlib
-
-        return contextlib.nullcontext()
-
-    def observe(self, *_a, **_kw):
-        pass
-
-    def info(self, *_a, **_kw):
-        pass
+# Pending cert rows buffered in CertWriter waiting for the next flush.
+cert_writer_pending = Gauge(
+    "ct_cert_writer_pending",
+    "Parsed certs buffered in CertWriter not yet flushed to ClickHouse",
+)
 
 
-class MetricsManager:
-    """Encapsulates Prometheus metrics used by the collector.
+# ─────────────────────────────────────────────────────────────────────
+# HTTP fetching – throughput, latency, errors, bytes
+# ─────────────────────────────────────────────────────────────────────
 
-    The manager registers counters, gauges and histograms used across
-    the collector. Pass a single `MetricsManager` instance into
-    subsystems and call the metric methods directly (they are no-ops
-    when `prometheus_client` is not available).
+# Every HTTP request attempted.
+# Labels: log_url, fetch_type (rfc6962 | tiled_full | tiled_partial)
+fetch_requests_total = Counter(
+    "ct_fetch_requests_total",
+    "Total HTTP fetch attempts",
+    ["log_url", "fetch_type"],
+)
+
+# Requests that returned a usable response body.
+fetch_success_total = Counter(
+    "ct_fetch_success_total",
+    "Total successful HTTP fetches (2xx with data)",
+    ["log_url", "fetch_type"],
+)
+
+# Any non-success outcome tagged with the HTTP status or reason string.
+# Labels: log_url, fetch_type, status_code (e.g. "404", "429", "timeout", "error")
+fetch_errors_total = Counter(
+    "ct_fetch_errors_total",
+    "Total fetch failures by log, type, and status code",
+    ["log_url", "fetch_type", "status_code"],
+)
+
+# Raw CT entries received from the wire (before parsing).
+# Labels: log_url
+entries_fetched_total = Counter(
+    "ct_entries_fetched_total",
+    "Total CT log entries received from the wire (before parsing)",
+    ["log_url"],
+)
+
+# End-to-end HTTP round-trip time.
+# Labels: log_url, fetch_type
+fetch_duration_seconds = Histogram(
+    "ct_fetch_duration_seconds",
+    "HTTP fetch round-trip latency in seconds",
+    ["log_url", "fetch_type"],
+    buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+)
+
+# Bytes received per fetch.
+# Labels: log_url, fetch_type
+fetch_bytes_total = Counter(
+    "ct_fetch_bytes_total",
+    "Total bytes received from CT log HTTP endpoints",
+    ["log_url", "fetch_type"],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Parse pipeline
+# ─────────────────────────────────────────────────────────────────────
+
+# Entries the parser could not decode.
+# Labels: log_url, format (rfc6962 | tiled_sunlight | tiled_sycamore)
+parse_errors_total = Counter(
+    "ct_parse_errors_total",
+    "Total entries that failed to parse",
+    ["log_url", "format"],
+)
+
+# Wall-clock time for the synchronous parse step (runs in asyncio.to_thread).
+# Labels: format
+parse_duration_seconds = Histogram(
+    "ct_parse_duration_seconds",
+    "Wall-clock time for one batch/tile parse call (CPU-bound, in thread pool)",
+    ["format"],
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+)
+
+# Entries per batch/tile (size distribution, useful for tuning BATCH_SIZE).
+# Labels: format
+parse_batch_size = Histogram(
+    "ct_parse_batch_size_entries",
+    "Number of entries in each parsed batch or tile",
+    ["format"],
+    buckets=[8, 16, 32, 64, 128, 256, 512, 1024, 2048],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Queue depths – backpressure visibility
+# ─────────────────────────────────────────────────────────────────────
+
+parse_queue_depth = Gauge(
+    "ct_parse_queue_depth",
+    "Batches waiting in the parse queue (fetcher → parser)",
+)
+
+write_queue_depth = Gauge(
+    "ct_write_queue_depth",
+    "Cert batches waiting in the write queue (parser → DB writer)",
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Worker / concurrency
+# ─────────────────────────────────────────────────────────────────────
+
+active_collector_tasks = Gauge(
+    "ct_active_collector_tasks",
+    "Number of per-log collector tasks currently running",
+)
+
+active_parser_workers = Gauge(
+    "ct_active_parser_workers",
+    "Number of parser worker coroutines (fixed pool size at startup)",
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Per-log progress & backlog
+# ─────────────────────────────────────────────────────────────────────
+
+# Latest entry index reached for each log.
+# Labels: log_url
+log_progress_index = Gauge(
+    "ct_log_progress_index",
+    "Highest entry index collected so far for this CT log",
+    ["log_url"],
+)
+
+# Most-recently observed total log size (from STH / checkpoint).
+# Labels: log_url
+log_length = Gauge(
+    "ct_log_length",
+    "Latest known CT log length (tree_size from STH or checkpoint count)",
+    ["log_url"],
+)
+
+# Entries still to collect (log_length - log_progress_index).
+# Labels: log_url
+log_backlog = Gauge(
+    "ct_log_backlog_entries",
+    "Estimated entries remaining to collect for this CT log",
+    ["log_url"],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Slice table bookkeeping
+# ─────────────────────────────────────────────────────────────────────
+
+# New slices inserted into ct_log_slices.
+# Labels: log_id
+slices_created_total = Counter(
+    "ct_slices_created_total",
+    "Total ct_log_slices rows inserted (new slice creation only)",
+    ["log_id"],
+)
+
+# SliceWriter.flush() calls and rows written.
+slice_progress_flushes_total = Counter(
+    "ct_slice_progress_flushes_total",
+    "Total SliceWriter bulk flush operations",
+)
+
+slice_progress_rows_total = Counter(
+    "ct_slice_progress_rows_total",
+    "Total ct_log_slices progress rows written by SliceWriter",
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Database latency – reads
+# ─────────────────────────────────────────────────────────────────────
+
+# get_pending_slices SELECT … FINAL latency.
+db_get_slices_duration_seconds = Histogram(
+    "ct_db_get_slices_duration_seconds",
+    "Latency of SELECT pending slices from ClickHouse (FINAL dedup)",
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+)
+
+# ensure_slices() total latency (cache check + optional cold load + INSERT).
+db_ensure_slices_duration_seconds = Histogram(
+    "ct_db_ensure_slices_duration_seconds",
+    "Latency of ensure_slices() (cache check + optional cold-load + INSERT)",
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Database latency – writes
+# ─────────────────────────────────────────────────────────────────────
+
+# SliceWriter.flush() INSERT latency.
+db_slice_write_duration_seconds = Histogram(
+    "ct_db_slice_write_duration_seconds",
+    "Latency of SliceWriter bulk INSERT into ct_log_slices",
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
+)
+
+# CertWriter.flush() INSERT latency.
+db_cert_write_duration_seconds = Histogram(
+    "ct_db_cert_write_duration_seconds",
+    "Latency of CertWriter bulk INSERT into ct_certs",
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+)
+
+# Rows per CertWriter flush.
+db_cert_write_batch_size = Histogram(
+    "ct_db_cert_write_batch_size_rows",
+    "Number of ct_certs rows per CertWriter flush",
+    buckets=[10, 50, 100, 200, 500, 1000, 2000, 5000],
+)
+
+# Any DB operation that raised an exception.
+# Labels: operation (ensure_slices | get_pending_slices | cert_flush | slice_flush | get_logs)
+db_errors_total = Counter(
+    "ct_db_errors_total",
+    "Total database operation errors by operation name",
+    ["operation"],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Connection pool
+# ─────────────────────────────────────────────────────────────────────
+
+db_pool_checked_out = Gauge(
+    "ct_db_pool_checked_out",
+    "SQLAlchemy QueuePool connections currently checked out",
+)
+
+db_pool_overflow = Gauge(
+    "ct_db_pool_overflow",
+    "SQLAlchemy QueuePool connections currently in overflow (above pool_size)",
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Log-length updater
+# ─────────────────────────────────────────────────────────────────────
+
+# STH / checkpoint fetch failures.
+# Labels: log_url, log_type (normal | tiled)
+log_length_update_errors_total = Counter(
+    "ct_log_length_update_errors_total",
+    "Total failures fetching STH or checkpoint for log-length updates",
+    ["log_url", "log_type"],
+)
+
+# Wall-clock time for one full update cycle across all logs.
+log_length_update_duration_seconds = Histogram(
+    "ct_log_length_update_duration_seconds",
+    "Wall-clock time for one complete LogLengthUpdater update cycle",
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Helper used by cert_collector.py
+# ─────────────────────────────────────────────────────────────────────
+
+def extract_issuer_o(issuer_dn: str) -> str:
     """
+    Extract the O= value from an issuer DN string such as:
+      'organizationName=Let's Encrypt, countryName=US'
+    Truncated to 64 chars to keep Prometheus label cardinality bounded.
+    Returns 'unknown' if no O= is found.
+    """
+    for part in issuer_dn.split(","):
+        part = part.strip()
+        for prefix in ("O=", "organizationName=", "2.5.4.10="):
+            if part.startswith(prefix):
+                val = part[len(prefix):].strip().strip("'\"")
+                return val[:64]
+    return "unknown"
 
-    def __init__(self) -> None:
-        self._noop = _NoopMetric()
+# ─────────────────────────────────────────────────────────────────────
+# WebSocket  (used by websocket.py)
+# ─────────────────────────────────────────────────────────────────────
 
-        if PROM_AVAILABLE:
-            self._start_server()
-            self._register_metrics()
-        else:
-            logger.warning("prometheus_client not available; metrics disabled")
-            self._register_noops()
 
-    # ------------------------------------------------------------------
-    # Server
-    # ------------------------------------------------------------------
 
-    def _start_server(self) -> None:
-        try:
-            start_http_server(PROMETHEUS_PORT)
-            logger.info(
-                "Prometheus metrics server started on :%s",
-                PROMETHEUS_PORT,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Could not start Prometheus metrics server: %s",
-                exc,
-            )
 
-    # ------------------------------------------------------------------
-    # Real metrics
-    # ------------------------------------------------------------------
-
-    def _register_metrics(self) -> None:
-        # ---- Build info ----
-        self.build_info = Info(
-            "ct_collector", "Collector service build information"
-        )
-        self.build_info.info({"service": "collector"})
-
-        # ---- General counters ----
-        self.entries_processed = Counter(
-            "ct_entries_processed_total", "Total CT log entries processed"
-        )
-        self.parse_failures = Counter(
-            "ct_parse_failures_total", "Certificate parse failures"
-        )
-        self.extraction_failures = Counter(
-            "ct_extraction_failures_total", "Certificate extraction failures"
-        )
-        self.poll_errors = Counter(
-            "ct_poll_errors_total", "Errors while polling CT logs"
-        )
-        self.skipped_logs = Counter(
-            "ct_skipped_unresolvable_logs_total",
-            "CT logs skipped due to DNS resolution failure",
-        )
-        self.parse_successes = Counter(
-            "ct_entries_parsed_success_total",
-            "Successfully parsed CT entries",
-        )
-
-        # ---- Gauges ----
-        self.active_clients = Gauge(
-            "ct_websocket_active_clients",
-            "Currently connected WebSocket clients",
-        )
-        self.total_logs = Gauge(
-            "ct_total_logs", "Number of CT logs being monitored"
-        )
-
-        # ---- Histograms ----
-        self.parse_duration = Histogram(
-            "ct_cert_parse_seconds",
-            "Time spent parsing a single certificate (seconds)",
-            buckets=(0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25),
-        )
-
-        # ---- Per-log counters / gauges ----
-        self.certs_by_log = Counter(
-            "ct_certs_processed_by_log_total",
-            "Certificates successfully processed per CT log",
-            ["log"],
-        )
-        # per-log extraction failures counter removed (unused)
-        self.parse_failures_by_log = Counter(
-            "ct_parse_failures_by_log_total",
-            "Parse failures per CT log",
-            ["log"],
-        )
-        self.last_index = Gauge(
-            "ct_log_last_index",
-            "Last processed tree index per CT log",
-            ["log"],
-        )
-
-        # ---- Entry / leaf classification ----
-        self.skipped_entry_type = Counter(
-            "ct_skipped_entry_type_total",
-            "Skipped entries by entry_type",
-            ["entry_type"],
-        )
-        self.leaf_version = Counter(
-            "ct_leaf_version_total",
-            "MerkleTreeLeaf version distribution",
-            ["version"],
-        )
-        self.leaf_type = Counter(
-            "ct_leaf_type_total",
-            "MerkleTreeLeaf leaf_type distribution",
-            ["leaf_type"],
-        )
-        self.entry_type = Counter(
-            "ct_entry_type_total",
-            "CT log entry_type distribution (0=x509,1=precert)",
-            ["entry_type"],
-        )
-        self.cert_version = Counter(
-            "ct_certificate_version_total",
-            "Certificate version distribution (v1/v2/v3)",
-            ["version"],
-        )
-
-        # ---- Database metrics ----
-        self.db_writes_total = Counter(
-            "ct_db_writes_total",
-            "Total certificate writes attempted to the database",
-        )
-        self.db_write_errors_total = Counter(
-            "ct_db_write_errors_total",
-            "Failed certificate writes to the database",
-        )
-        self.db_write_duration_seconds = Histogram(
-            "ct_db_write_duration_seconds",
-            "Time spent writing a certificate to the database",
-            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
-        )
-        self.db_batch_size = Histogram(
-            "ct_db_batch_size",
-            "Number of rows written in a single DB batch",
-            buckets=(1, 10, 50, 100, 250, 500),
-        )
-        self.db_pool_size = Gauge(
-            "ct_db_pool_size",
-            "Current database connection pool size",
-        )
-        self.db_buffer_size = Gauge(
-            "ct_db_buffer_size",
-            "Number of rows currently buffered for DB insertion",
-        )
-        self.db_available = Gauge(
-            "ct_db_available",
-            "Whether the database connection is available (1=yes, 0=no)",
-        )
-
-        # ---- Redis metrics ----
-        self.redis_publishes_total = Counter(
-            "ct_redis_publishes_total",
-            "Total messages published to Redis",
-        )
-        self.redis_publish_errors_total = Counter(
-            "ct_redis_publish_errors_total",
-            "Failed Redis publish operations",
-        )
-        self.redis_publish_duration_seconds = Histogram(
-            "ct_redis_publish_duration_seconds",
-            "Time spent publishing a message to Redis",
-            buckets=(0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1),
-        )
-        self.redis_available = Gauge(
-            "ct_redis_available",
-            "Whether the Redis connection is available (1=yes, 0=no)",
-        )
-
-        # ---- WebSocket broadcast metrics ----
-        self.ws_broadcasts_total = Counter(
-            "ct_ws_broadcasts_total",
-            "Total WebSocket broadcast attempts",
-        )
-        self.ws_broadcast_errors_total = Counter(
-            "ct_ws_broadcast_errors_total",
-            "Failed WebSocket message deliveries to individual clients",
-        )
-        self.ws_broadcast_duration_seconds = Histogram(
-            "ct_ws_broadcast_duration_seconds",
-            "Time spent broadcasting a message to all WebSocket clients",
-            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25),
-        )
-
-        # ---- HTTP fetch metrics (CT log API calls) ----
-        self.http_requests_total = Counter(
-            "ct_http_requests_total",
-            "Total HTTP requests made to CT log APIs",
-            ["method", "status"],
-        )
-        self.http_request_duration_seconds = Histogram(
-            "ct_http_request_duration_seconds",
-            "Time spent on HTTP requests to CT log APIs",
-            buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
-        )
-
-        # ---- Batch processing metrics ----
-        self.batch_entries_fetched = Histogram(
-            "ct_batch_entries_fetched",
-            "Number of entries fetched per batch from a CT log",
-            buckets=(1, 10, 50, 100, 250, 500),
-        )
-        self.batch_processing_duration_seconds = Histogram(
-            "ct_batch_processing_duration_seconds",
-            "Time spent processing a single batch of CT log entries",
-            buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
-        )
-
-    # ------------------------------------------------------------------
-    # No-op fallbacks
-    # ------------------------------------------------------------------
-
-    def _register_noops(self) -> None:
-        self.build_info = self._noop
-        self.entries_processed = self._noop
-        self.parse_failures = self._noop
-        self.extraction_failures = self._noop
-        self.poll_errors = self._noop
-        self.skipped_logs = self._noop
-        self.parse_successes = self._noop
-        self.active_clients = self._noop
-        self.total_logs = self._noop
-        self.parse_duration = self._noop
-        self.certs_by_log = self._noop
-        # extraction_failures_by_log removed (unused)
-        self.parse_failures_by_log = self._noop
-        self.last_index = self._noop
-        self.skipped_entry_type = self._noop
-        self.leaf_version = self._noop
-        self.leaf_type = self._noop
-        self.entry_type = self._noop
-        self.cert_version = self._noop
-        # DB
-        self.db_writes_total = self._noop
-        self.db_write_errors_total = self._noop
-        self.db_write_duration_seconds = self._noop
-        self.db_batch_size = self._noop
-        self.db_pool_size = self._noop
-        self.db_buffer_size = self._noop
-        self.db_available = self._noop
-        # Redis
-        self.redis_publishes_total = self._noop
-        self.redis_publish_errors_total = self._noop
-        self.redis_publish_duration_seconds = self._noop
-        self.redis_available = self._noop
-        # WebSocket
-        self.ws_broadcasts_total = self._noop
-        self.ws_broadcast_errors_total = self._noop
-        self.ws_broadcast_duration_seconds = self._noop
-        # HTTP
-        self.http_requests_total = self._noop
-        self.http_request_duration_seconds = self._noop
-        # Batch
-        self.batch_entries_fetched = self._noop
-        self.batch_processing_duration_seconds = self._noop

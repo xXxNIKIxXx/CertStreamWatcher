@@ -14,9 +14,8 @@ prometheus_client==0.24.1
 propcache==0.4.1
 pycparser==3.0
 pytz==2026.1.post1
-redis==7.3.0
 urllib3==2.6.3
-websockets==16.0
+
 yarl==1.23.0
 zstandard==0.25.0
 colorama==0.4.6

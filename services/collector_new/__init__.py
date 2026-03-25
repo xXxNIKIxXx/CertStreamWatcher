@@ -1,1 +1,0 @@
-"""CertStream collector service package."""

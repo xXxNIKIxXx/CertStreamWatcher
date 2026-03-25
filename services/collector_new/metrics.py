@@ -337,3 +337,11 @@ def extract_issuer_o(issuer_dn: str) -> str:
                 val = part[len(prefix):].strip().strip("'\"")
                 return val[:64]
     return "unknown"
+
+# ─────────────────────────────────────────────────────────────────────
+# WebSocket  (used by websocket.py)
+# ─────────────────────────────────────────────────────────────────────
+
+
+
+
