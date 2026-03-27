@@ -3,8 +3,7 @@ import sys
 import json
 import os
 from datetime import datetime
-
-from services.shared.logger import ColorFormatter
+from shared.logger import ColorFormatter
 
 
 class JsonFormatter(logging.Formatter):
