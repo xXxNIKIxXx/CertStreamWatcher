@@ -1,6 +1,6 @@
 
 # Import all models from shared.models
-from services.shared.models import Base, CTLog, CTLogSlice, CTLogSource, CTLogOperator, CTCert, CTSetting
+from services.shared.models import Base, CTLog, CTLogSlice, CTLogOperator, CTCert, CTSetting
 
 
 # ---------------------------------------------------------------------------
