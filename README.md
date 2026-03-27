@@ -711,3 +711,5 @@ Ensure `log.propagate = False` is set for all named loggers (already set in `con
 
 **High scripting scores on legitimate certs**
 Tune keyword weights in `filter_manager.py` or add an `allow` rule for known-good domains.
+
+© 2026 Niklas Fuchs. Licensed under CC BY-NC-SA 4.0.
