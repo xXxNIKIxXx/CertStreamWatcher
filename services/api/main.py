@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import get_logger
+from services.shared.logger import get_logger
 from .database import DatabasePool
 from .metrics import ApiMetrics
 
@@ -100,19 +100,8 @@ def create_app() -> FastAPI:
         return response
 
     # -- Register routers --------------------------------------------------
-
-    #from .routes.certificates import router as certs_router
-    #from .routes.log_sources import router as log_sources_router
-    #from .routes.enrich import router as enrich_router
-    #from .routes.stats import router as stats_router
-    #from .routes.health import router as health_router
     from .routes.filters import router as filters_router
 
-    #app.include_router(certs_router, prefix="/api/v1")
-    #app.include_router(log_sources_router, prefix="/api/v1")
-    #app.include_router(enrich_router, prefix="/api/v1")
-    #app.include_router(stats_router, prefix="/api/v1")
-    #app.include_router(health_router, prefix="/api/v1")
     app.include_router(filters_router, prefix="/api/v1")
 
     # -- Root redirect to docs ---------------------------------------------

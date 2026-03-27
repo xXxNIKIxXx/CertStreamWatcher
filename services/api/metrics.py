@@ -5,7 +5,9 @@ from __future__ import annotations
 import time
 from typing import Callable
 
-from .config import get_logger, PROMETHEUS_PORT
+from .config import PROMETHEUS_PORT
+
+from services.shared.logger import get_logger
 
 logger = get_logger("CertStreamAPI.Metrics")
 

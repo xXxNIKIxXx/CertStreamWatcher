@@ -6,7 +6,8 @@ import time
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from .config import get_logger, DB_DSN
+from services.shared.logger import get_logger
+from .config import DB_DSN
 
 logger = get_logger("CertStreamAPI.Database")
 

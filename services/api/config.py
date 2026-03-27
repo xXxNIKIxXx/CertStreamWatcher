@@ -1,8 +1,6 @@
 """Configuration for the CertStream API service."""
 
 import os
-import logging
-
 
 # ---------------------------------------------------------------------------
 # Database
@@ -13,11 +11,6 @@ DB_DSN = os.getenv(
 )
 DB_MIN_POOL = int(os.getenv("CT_DB_MIN_POOL", "2"))
 DB_MAX_POOL = int(os.getenv("CT_DB_MAX_POOL", "10"))
-
-# ---------------------------------------------------------------------------
-# Redis
-# ---------------------------------------------------------------------------
-REDIS_URL = os.getenv("CT_REDIS_URL") or None
 
 # ---------------------------------------------------------------------------
 # Server
@@ -32,18 +25,3 @@ PROMETHEUS_PORT = int(os.getenv("CT_API_PROM_PORT", "9090"))
 # ---------------------------------------------------------------------------
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 500
-
-
-def get_logger(name: str) -> logging.Logger:
-    """Create and configure a logger with a standard format."""
-    log = logging.getLogger(name)
-    log.setLevel(logging.INFO)
-    if not log.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s %(levelname)s %(name)s: %(message)s"
-            )
-        )
-        log.addHandler(handler)
-    return log

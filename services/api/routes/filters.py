@@ -5,61 +5,10 @@ from __future__ import annotations
 
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
-from typing import List, Optional, Any
-from ..main import db
-from services.shared.models import CTSetting
-from sqlalchemy import select, insert, desc
-import json
+from ..models import FilterRule, FilterSettings
+from ..util.filters import get_current_settings, save_settings
 
 router = APIRouter(prefix="/filters", tags=["Filters"])
-
-SETTINGS_KEY = "settings"
-
-# Pydantic models for filter rules and settings
-
-
-class FilterRule(BaseModel):
-    field: str
-    op: str
-    value: Any
-    enabled: Optional[bool] = True
-
-
-class FilterSettings(BaseModel):
-    default_action: str = Field(..., pattern="^(allow|deny)$")
-    filters: List[FilterRule] = []
-
-# Utility to load current settings from DB
-
-
-async def get_current_settings() -> FilterSettings:
-    # Build SQLAlchemy select for latest setting
-    stmt = (
-        select(CTSetting.value)
-        .where(CTSetting.key == SETTINGS_KEY)
-        .order_by(desc(CTSetting.ts))
-        .limit(1)
-    )
-    compiled = stmt.compile(compile_kwargs={"literal_binds": True})
-    result = await db._client.query(str(compiled))
-    rows = result.result_rows if hasattr(result, 'result_rows') else result
-    if not rows or not rows[0]:
-        return FilterSettings(default_action="allow", filters=[])
-    try:
-        data = json.loads(rows[0][0])
-        return FilterSettings(**data)
-    except Exception:
-        return FilterSettings(default_action="allow", filters=[])
-
-# Utility to persist settings
-
-
-async def save_settings(settings: FilterSettings):
-    # Build SQLAlchemy insert for CTSetting
-    stmt = insert(CTSetting).values(key=SETTINGS_KEY, value=settings.json())
-    compiled = stmt.compile(compile_kwargs={"literal_binds": True})
-    await db._client.command(str(compiled))
 
 # List all filters and current mode
 
