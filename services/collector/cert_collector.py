@@ -36,7 +36,8 @@ import time as _time
 import aiohttp
 
 from .models import CTLog, CTLogSlice
-from .config import get_logger, BATCH_SIZE, USER_AGENT
+from .config import BATCH_SIZE, USER_AGENT
+from services.shared.logger import get_logger
 from .database import SliceWriter, CertWriter
 from .cert_parser import parse_entries_bulk, parse_tile_data
 from . import metrics

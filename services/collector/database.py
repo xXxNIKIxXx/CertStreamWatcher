@@ -33,7 +33,7 @@ batches) so the write rate is manageable.  Old rows are TTL-expired after
 survives.
 """
 
-from .config import get_logger
+from services.shared.logger import get_logger
 from . import metrics
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker

@@ -1,7 +1,8 @@
 import asyncio
 import time as _time
 import aiohttp
-from .config import get_logger, USER_AGENT
+from .config import USER_AGENT
+from services.shared.logger import get_logger
 from . import metrics
 
 logger = get_logger("LogLengthUpdater")

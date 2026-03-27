@@ -1,7 +1,3 @@
-async def main():
-    """Entrypoint for running the collector as a module or script."""
-    service = CertStreamService()
-    await service.start()
 """
 certstream_service.py – Main orchestrator for the CertStream collector.
 
@@ -35,12 +31,13 @@ import threading
 
 from .config import (
     DB,
-
     SINGLE_NODE,
     WORKER_INDEX,
     WORKER_COUNT,
-    get_logger,
 )
+
+from services.shared.logger import get_logger
+
 from .database import DatabaseManager
 from .filter_manager import FilterManager
 from .log_length_updater import LogLengthUpdater
@@ -48,6 +45,12 @@ from . import metrics as _prom
 from . import metrics as prom_metrics
 
 logger = get_logger("CertStreamService")
+
+
+async def main():
+    """Entrypoint for running the collector as a module or script."""
+    service = CertStreamService()
+    await service.start()
 
 
 class CertStreamService:

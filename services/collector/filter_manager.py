@@ -57,7 +57,7 @@ import re
 import threading
 from typing import Any, Dict, List, Optional
 
-from .config import get_logger
+from services.shared.logger import get_logger
 from .scoring import CertScoring
 
 logger = get_logger("FilterManager")
