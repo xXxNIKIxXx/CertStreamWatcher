@@ -15,9 +15,6 @@ from pathlib import Path
 
 # Real-time socket server
 
-
-
-
 # Third-party imports
 from flask import (
     Flask,
