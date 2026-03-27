@@ -26,7 +26,6 @@ class FilterRule(BaseModel):
     enabled: Optional[bool] = True
 
 
-
 class FilterSettings(BaseModel):
     default_action: str = Field(..., pattern="^(allow|deny)$")
     filters: List[FilterRule] = []
