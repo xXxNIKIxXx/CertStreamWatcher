@@ -13,3 +13,10 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.41.0
 prometheus_client==0.24.1
+python-whois
+dnspython
+requests
+ipwhois
+tldextract
+clickhouse-connect==0.14.0
+sqlalchemy==2.0.32
