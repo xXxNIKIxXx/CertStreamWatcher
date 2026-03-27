@@ -6,7 +6,7 @@
   <h4>Filters</h4>
   <div id="filters-list"></div>
   <button class="btn btn-success mb-3" onclick="showAddFilterModal()">Add Filter</button>
-  <form method="post" action="{{ url_for('filters.filters_save') }}" id="filters-form">
+  <form id="filters-form">
     <input type="hidden" name="filters_json" id="filters_json">
     <div class="mb-3">
       <label for="default_action" class="form-label">Default Action</label>
@@ -15,7 +15,7 @@
         <option value="deny" {% if default_action == 'deny' %}selected{% endif %}>Deny All</option>
       </select>
     </div>
-    <button class="btn btn-primary" type="submit">Save Changes</button>
+    <!-- Save Changes button removed, auto-save is enabled -->
   </form>
 </div>
 
@@ -71,14 +71,23 @@
 let filters = {{ filters_json|safe }};
 
 function renderFilters() {
-  let html = '<table class="table"><thead><tr><th>Field</th><th>Op</th><th>Value</th><th>Enabled</th><th>Actions</th></tr></thead><tbody>';
+  let html = '<table class="table"><thead><tr><th>Field</th><th>Op</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
   filters.forEach((f, idx) => {
     if (f === null) return;
+    // Status indicator: green if enabled, gray if disabled
+    const isEnabled = f.enabled !== false;
+    const statusColor = isEnabled ? '#28a745' : '#6c757d';
+    const statusText = isEnabled ? 'Enabled' : 'Disabled';
     html += `<tr>
       <td>${f.field}</td>
       <td>${f.op}</td>
       <td>${f.value}</td>
-      <td><input type="checkbox" ${f.enabled !== false ? 'checked' : ''} onchange="toggleFilter(${idx})"></td>
+      <td>
+        <button class="btn btn-sm" style="background-color: ${statusColor}; color: white; min-width: 90px;" onclick="toggleFilter(${idx})">
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${statusColor}; margin-right: 6px;"></span>
+          ${isEnabled ? 'Enabled' : 'Disabled'}
+        </button>
+      </td>
       <td>
         <button class="btn btn-sm btn-warning" onclick="editFilter(${idx})">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="deleteFilter(${idx})">Delete</button>
@@ -87,6 +96,29 @@ function renderFilters() {
   });
   html += '</tbody></table>';
   document.getElementById('filters-list').innerHTML = html;
+}
+
+function autoSaveFilters() {
+  const default_action = document.getElementById('default_action').value;
+  fetch("{{ url_for('filters.filters_autosave') }}", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest"
+    },
+    body: JSON.stringify({
+      filters: filters,
+      default_action: default_action
+    })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) {
+        // Optionally show error
+        console.error("Auto-save failed", data.error);
+      }
+    })
+    .catch(e => console.error("Auto-save error", e));
 }
 
 function showAddFilterModal() {
@@ -115,6 +147,7 @@ function saveFilter() {
   }
   hideFilterModal();
   renderFilters();
+  autoSaveFilters();
 }
 
 function editFilter(idx) {
@@ -130,17 +163,24 @@ function editFilter(idx) {
 function deleteFilter(idx) {
   filters.splice(idx, 1);
   renderFilters();
+  autoSaveFilters();
 }
 
 function toggleFilter(idx) {
   filters[idx].enabled = !filters[idx].enabled;
   renderFilters();
+  autoSaveFilters();
 }
 
 document.getElementById('filters-form').onsubmit = function() {
   document.getElementById('filters_json').value = JSON.stringify(filters);
   return true;
 };
+
+// Auto-save when default action changes
+document.getElementById('default_action').addEventListener('change', function() {
+  autoSaveFilters();
+});
 
 window.onload = renderFilters;
 </script>

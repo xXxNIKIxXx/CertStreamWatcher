@@ -4,6 +4,12 @@ import json
 import os
 import logging
 
+
+import os
+import json
+import logging
+from flask import jsonify
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from app.core import clickhouse
@@ -63,3 +69,24 @@ def filters_save():
 
     flash("Settings saved", "success")
     return redirect(url_for("filters.filters_page"))
+
+
+# AJAX endpoint for auto-saving filters
+@bp.route("/autosave", methods=["POST"])
+def filters_autosave():
+    data = request.get_json(force=True)
+    filters = data.get("filters", [])
+    default_action = data.get("default_action", "allow")
+    try:
+        if not isinstance(filters, list):
+            raise ValueError("Filters must be a JSON list")
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"Invalid JSON: {exc}"}), 400
+
+    settings = {"default_action": default_action, "filters": filters}
+    try:
+        clickhouse.insert_setting("settings", json.dumps(settings))
+    except Exception as exc:
+        logger.exception("Failed to persist settings to ClickHouse (AJAX)")
+        return jsonify({"success": False, "error": "Could not persist settings to database"}), 500
+    return jsonify({"success": True})

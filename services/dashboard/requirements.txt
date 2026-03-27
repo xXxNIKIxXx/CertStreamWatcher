@@ -21,3 +21,5 @@ zope.interface==8.2
 clickhouse-connect==0.14.0
 prometheus_client==0.24.1
 redis==7.3.0
+sqlalchemy==2.0.19
+clickhouse-sqlalchemy==0.3.2

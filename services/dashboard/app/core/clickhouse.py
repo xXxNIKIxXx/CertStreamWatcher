@@ -140,3 +140,6 @@ def get_latest_setting(key: str) -> str | None:
         except Exception:
             pass
     return None
+
+# Import shared SQLAlchemy models for future use
+from shared.models import Base, CTLog, CTLogSlice, CTLogSource, CTLogOperator, CTCert, CTSetting
