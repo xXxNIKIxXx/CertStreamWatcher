@@ -213,3 +213,4 @@ logs/
 scripts/
 .VSCodeCounter/
 docker-compose-single-node.yml
+requirements-dev.txt
