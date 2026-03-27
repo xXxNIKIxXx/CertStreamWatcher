@@ -6,6 +6,7 @@ COPY ./services/collector/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy the collector package preserving the package hierarchy for relative imports
+COPY ./services/shared /app/services/shared
 COPY ./services/__init__.py /app/services/__init__.py
 COPY ./services/collector /app/services/collector
 

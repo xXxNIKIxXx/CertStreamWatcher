@@ -34,6 +34,10 @@ RUN pip install --no-cache-dir gunicorn gevent
 # Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
 
+
+# Copy shared models for import
+COPY ./services/shared ./shared
+
 # Copy application files
 COPY ./services/dashboard .
 

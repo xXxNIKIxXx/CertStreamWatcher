@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /install /usr/local
 
 # Copy application code
+COPY ./services/shared /app/services/shared
 COPY ./services/__init__.py /app/services/__init__.py
 COPY ./services/api /app/services/api
 
