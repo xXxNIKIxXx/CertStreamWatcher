@@ -49,9 +49,7 @@ def create_app() -> FastAPI:
         title="CertStream Watcher API",
         description=(
             "REST API for querying Certificate Transparency log data "
-            "collected by CertStream Watcher.\n\n"
-            "**Features:** full-text search, fingerprint lookup, analytics, "
-            "pagination, and Prometheus metrics."
+            "collected by CertStream Watcher."
         ),
         version="1.0.0",
         docs_url="/docs",       # Swagger UI
@@ -100,9 +98,14 @@ def create_app() -> FastAPI:
         return response
 
     # -- Register routers --------------------------------------------------
+
     from .routes.filters import router as filters_router
+    from .routes.ctlogoperator import router as ctlogoperator_router
+    from .routes.ctlog import router as ctlog_router
 
     app.include_router(filters_router, prefix="/api/v1")
+    app.include_router(ctlogoperator_router, prefix="/api/v1")
+    app.include_router(ctlog_router, prefix="/api/v1")
 
     # -- Root redirect to docs ---------------------------------------------
     @app.get("/", include_in_schema=False)
