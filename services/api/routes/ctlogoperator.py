@@ -18,7 +18,7 @@ class CTLogOperatorModel(BaseModel):
     added_at: Optional[datetime]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 @router.get("/", response_model=List[CTLogOperatorModel])

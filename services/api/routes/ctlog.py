@@ -29,7 +29,7 @@ class CTLogModel(BaseModel):
     added_at: Optional[str]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 @router.get("/", response_model=List[CTLogModel])
