@@ -6,6 +6,8 @@ from datetime import datetime
 from services.api.db_session import SessionLocal
 from sqlalchemy.future import select
 
+from ..util.mutation_guard import mutation_guard
+
 router = APIRouter(prefix="/ctlogoperator", tags=["CTLogOperator"])
 
 
@@ -27,6 +29,7 @@ def list_ctlog_operators():
 
 
 @router.post("/", response_model=CTLogOperatorModel)
+@mutation_guard
 def add_ctlog_operator(item: CTLogOperatorModel):
     with SessionLocal() as session:
         obj = CTLogOperator(**item.dict())
@@ -37,6 +40,7 @@ def add_ctlog_operator(item: CTLogOperatorModel):
 
 
 @router.put("/{id}", response_model=CTLogOperatorModel)
+@mutation_guard
 def edit_ctlog_operator(id: str, item: CTLogOperatorModel):
     with SessionLocal() as session:
         result = session.execute(select(CTLogOperator).where(CTLogOperator.id == id))
@@ -51,6 +55,7 @@ def edit_ctlog_operator(id: str, item: CTLogOperatorModel):
 
 
 @router.delete("/{id}")
+@mutation_guard
 def delete_ctlog_operator(id: str):
     with SessionLocal() as session:
         result = session.execute(select(CTLogOperator).where(CTLogOperator.id == id))

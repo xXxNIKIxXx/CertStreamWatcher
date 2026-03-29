@@ -3,10 +3,11 @@ filters.py - REST API endpoints for managing filter rules and default mode.
 """
 from __future__ import annotations
 
-
 from fastapi import APIRouter, HTTPException, Query
+
 from ..models import FilterRule, FilterSettings
 from ..util.filters import get_current_settings, save_settings
+from ..util.mutation_guard import mutation_guard
 
 router = APIRouter(prefix="/filters", tags=["Filters"])
 
@@ -21,6 +22,7 @@ def get_filters():
 
 
 @router.post("", response_model=FilterSettings)
+@mutation_guard
 def add_filter(rule: FilterRule):
     settings = get_current_settings()
     settings.filters.append(rule)
@@ -31,6 +33,7 @@ def add_filter(rule: FilterRule):
 
 
 @router.put("/{index}", response_model=FilterSettings)
+@mutation_guard
 def update_filter(index: int, rule: FilterRule):
     settings = get_current_settings()
     if index < 0 or index >= len(settings.filters):
@@ -43,6 +46,7 @@ def update_filter(index: int, rule: FilterRule):
 
 
 @router.delete("/{index}", response_model=FilterSettings)
+@mutation_guard
 def delete_filter(index: int):
     settings = get_current_settings()
     if index < 0 or index >= len(settings.filters):
@@ -55,6 +59,7 @@ def delete_filter(index: int):
 
 
 @router.patch("/{index}/toggle", response_model=FilterSettings)
+@mutation_guard
 def toggle_filter(index: int):
     settings = get_current_settings()
     if index < 0 or index >= len(settings.filters):
@@ -69,8 +74,9 @@ def toggle_filter(index: int):
 
 
 @router.patch("/default_action", response_model=FilterSettings)
-async def set_default_action(action: str = Query(..., pattern="^(allow|deny)$")):
-    settings = await get_current_settings()
+@mutation_guard
+def set_default_action(action: str = Query(..., pattern="^(allow|deny)$")):
+    settings = get_current_settings()
     settings.default_action = action
-    await save_settings(settings)
+    save_settings(settings)
     return settings
