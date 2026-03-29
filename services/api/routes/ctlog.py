@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 from services.shared.models import CTLog
 from services.api.db_session import SessionLocal
 from sqlalchemy.future import select
@@ -9,6 +10,7 @@ from ..util.mutation_guard import mutation_guard
 
 # CTLog endpoints
 router = APIRouter(prefix="/ctlog", tags=["CTLog"])
+
 
 
 class CTLogModel(BaseModel):
@@ -20,13 +22,13 @@ class CTLogModel(BaseModel):
     url: Optional[str]
     mmd: Optional[int]
     state: Optional[str]
-    temporal_interval_start: Optional[str]
-    temporal_interval_end: Optional[str]
+    temporal_interval_start: Optional[datetime]
+    temporal_interval_end: Optional[datetime]
     status: Optional[str]
     is_tiled: Optional[bool]
     submission_url: Optional[str]
     monitoring_url: Optional[str]
-    added_at: Optional[str]
+    added_at: Optional[datetime]
 
     class Config:
         from_attributes = True
