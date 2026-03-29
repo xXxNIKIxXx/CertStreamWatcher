@@ -1,6 +1,9 @@
 """Configuration for the CertStream API service."""
 
 import os
+import dotenv
+
+dotenv.load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Database
@@ -25,3 +28,9 @@ PROMETHEUS_PORT = int(os.getenv("CT_API_PROM_PORT", "9090"))
 # ---------------------------------------------------------------------------
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 500
+
+# ---------------------------------------------------------------------------
+# API Mutation Toggle
+# ---------------------------------------------------------------------------
+API_MUTATION_ENABLED = os.getenv("CT_API_MUTATION_ENABLED", "true").lower() == "true"
+API_MUTATION_ENABLED = not API_MUTATION_ENABLED
