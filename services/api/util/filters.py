@@ -1,6 +1,6 @@
 from ..models import FilterSettings
 from services.shared.models import CTSetting
-from sqlalchemy import select, insert, desc
+from sqlalchemy import select, desc
 import json
 
 from services.api.db_session import SessionLocal
