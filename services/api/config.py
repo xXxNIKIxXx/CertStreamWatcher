@@ -12,8 +12,6 @@ DB_DSN = os.getenv(
     "CT_DB_DSN",
     "clickhouse://default:@clickhouse:8123/certstream",
 )
-DB_MIN_POOL = int(os.getenv("CT_DB_MIN_POOL", "2"))
-DB_MAX_POOL = int(os.getenv("CT_DB_MAX_POOL", "10"))
 
 # ---------------------------------------------------------------------------
 # Server

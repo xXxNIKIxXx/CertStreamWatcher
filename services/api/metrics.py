@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import time
-from typing import Callable
-
 from .config import PROMETHEUS_PORT
 
 from services.shared.logger import get_logger
 
-logger = get_logger("CertStreamAPI.Metrics")
+logger = get_logger(__name__)
 
 try:
     from prometheus_client import (
@@ -17,9 +14,7 @@ try:
         Gauge,
         Histogram,
         Info,
-        start_http_server,
-        generate_latest,
-        CONTENT_TYPE_LATEST,
+        start_http_server
     )
 
     PROM_AVAILABLE = True
@@ -113,32 +108,6 @@ class ApiMetrics:
             buckets=(100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000),
         )
 
-        # Database metrics (read path)
-        self.db_queries_total = Counter(
-            "ct_api_db_queries_total",
-            "Total database queries executed",
-            ["endpoint"],
-        )
-        self.db_query_duration = Histogram(
-            "ct_api_db_query_duration_seconds",
-            "Database query latency",
-            ["endpoint"],
-            buckets=(0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
-        )
-        self.db_query_errors = Counter(
-            "ct_api_db_query_errors_total",
-            "Failed database queries",
-            ["endpoint"],
-        )
-        self.db_pool_size = Gauge(
-            "ct_api_db_pool_size",
-            "Database connection pool size",
-        )
-        self.db_available = Gauge(
-            "ct_api_db_available",
-            "Whether the database is reachable (1=yes, 0=no)",
-        )
-
     # -- no-ops -----------------------------------------------------------
 
     def _register_noops(self) -> None:
@@ -147,8 +116,3 @@ class ApiMetrics:
         self.http_request_duration = self._noop
         self.http_requests_in_progress = self._noop
         self.http_response_size = self._noop
-        self.db_queries_total = self._noop
-        self.db_query_duration = self._noop
-        self.db_query_errors = self._noop
-        self.db_pool_size = self._noop
-        self.db_available = self._noop

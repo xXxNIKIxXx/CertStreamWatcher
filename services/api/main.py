@@ -14,17 +14,14 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.shared.logger import get_logger
-from .database import DatabasePool
 from .metrics import ApiMetrics
 
-logger = get_logger("CertStreamAPI")
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-level singletons (available to route modules via import)
 # ---------------------------------------------------------------------------
 metrics = ApiMetrics()
-db = DatabasePool(metrics=metrics)
-
 
 # ---------------------------------------------------------------------------
 # Lifespan (startup / shutdown)
@@ -33,10 +30,8 @@ db = DatabasePool(metrics=metrics)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Connect to ClickHouse on startup, close on shutdown."""
-    await db.connect()
     logger.info("API service started")
     yield
-    await db.close()
     logger.info("API service stopped")
 
 
