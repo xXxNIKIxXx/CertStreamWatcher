@@ -33,4 +33,3 @@ MAX_PAGE_SIZE = 500
 # API Mutation Toggle
 # ---------------------------------------------------------------------------
 API_MUTATION_ENABLED = os.getenv("CT_API_MUTATION_ENABLED", "true").lower() == "true"
-API_MUTATION_ENABLED = not API_MUTATION_ENABLED
