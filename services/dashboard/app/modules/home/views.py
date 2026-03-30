@@ -6,7 +6,7 @@ import time
 
 from flask import Blueprint, render_template, jsonify
 
-from app.core import clickhouse
+from services.dashboard.app.core import clickhouse
 
 bp = Blueprint(
     "dashboard",
@@ -19,7 +19,7 @@ bp = Blueprint(
 logger = logging.getLogger(__name__)
 
 try:
-    from app.core.metrics import (
+    from services.dashboard.app.core.metrics import (
         DB_QUERY_COUNT,
         DB_QUERY_DURATION,
         DB_QUERY_ERRORS,

@@ -142,4 +142,4 @@ def get_latest_setting(key: str) -> str | None:
     return None
 
 # Import shared SQLAlchemy models for future use
-from shared.models import Base, CTLog, CTLogSlice, CTLogOperator, CTCert, CTSetting
+from services.shared.models import Base, CTLog, CTLogSlice, CTLogOperator, CTCert, CTSetting

@@ -14,7 +14,7 @@ set -e
 # fi
 
 echo "Starting Gunicorn with gevent worker class..."
-exec gunicorn --bind 0.0.0.0:5000 wsgi:app \
+exec gunicorn --bind 0.0.0.0:5000 services.dashboard.wsgi:app \
     --worker-class gevent \
     --workers ${WORKERS} --threads ${THREADS} --timeout ${TIMEOUT} \
     --forwarded-allow-ips="*"

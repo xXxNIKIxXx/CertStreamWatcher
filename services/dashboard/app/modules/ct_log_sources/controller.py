@@ -4,7 +4,7 @@ import json as pyjson
 from flask import send_file
 
 # Ensure ct_logs has is_tiled column on startup
-from app.core import clickhouse
+from services.dashboard.app.core import clickhouse
 def ensure_is_tiled_column():
     client = clickhouse.get_client()
     try:
@@ -24,7 +24,7 @@ ensure_is_tiled_column()
 
 import logging
 from flask import Blueprint, request, redirect, url_for, render_template, flash
-from app.core import clickhouse
+from services.dashboard.app.core import clickhouse
 from uuid import uuid4
 from datetime import datetime
 
@@ -187,7 +187,7 @@ def delete_operator(op_id):
 @bp.route("/logs", methods=["GET"])
 def list_logs():
     client = clickhouse.get_client()
-    # Show log name (description) as first column, then operator, url, etc. Remove log_id and key.
+    # Show log name (description) as first column, then operator, url, etc.
     # Aggregate progress from ct_log_slices: sum current_index and log_length per log
     rows = client.query(
         "SELECT l.id, l.description, o.name, l.url, l.mmd, l.state, l.temporal_interval_start, l.temporal_interval_end, "

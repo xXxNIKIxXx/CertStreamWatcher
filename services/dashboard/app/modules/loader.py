@@ -4,7 +4,7 @@ import logging
 import traceback
 from pathlib import Path
 
-from app import modules
+from services.dashboard.app import modules
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,8 @@ def _try_register(app, module_path, submodule):
     Raises:
         ImportError: Re-raised with full traceback if the module exists but fails to import
     """
-    full_import_path = f"app.modules.{module_path}.{submodule}"
-    module_logger = logging.getLogger(f"app.modules.{module_path}")
+    full_import_path = f"services.dashboard.app.modules.{module_path}.{submodule}"
+    module_logger = logging.getLogger(f"services.dashboard.app.modules.{module_path}")
 
     try:
         mod = importlib.import_module(full_import_path)
@@ -100,7 +100,7 @@ def register_blueprints(app):
     For each module, both controller.py and views.py can be registered if they exist.
     They will share the same url_prefix based on the folder structure.
 
-    Modules that fail to import are logged with a full stacktrace and skipped so
+    Modules that fail to import are logged and skipped so
     that the remaining modules can still load.
     """
     modules_path = Path(modules.__path__[0])
@@ -111,9 +111,8 @@ def register_blueprints(app):
                 if _try_register(app, module_path, sub):
                     found = True
             except Exception:
-                # _try_register already logged the full traceback; just skip this submodule.
                 logger.error(
-                    "Skipping %s.%s due to import error (see traceback above).",
+                    "Skipping %s.%s due to import error.",
                     module_path, sub,
                 )
 

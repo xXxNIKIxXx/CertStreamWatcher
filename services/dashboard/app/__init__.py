@@ -27,7 +27,7 @@ from .core.logging import configure_logging
 from .core.metrics import init_metrics
 from .modules.loader import register_blueprints
 
-from app.core import clickhouse 
+from services.dashboard.app.core import clickhouse 
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,8 @@ def get_config_class(env_name):
             environment.
     """
     try:
-        module = import_module(f"app.config.{env_name}.{env_name}")
-        logger.info(f"Loaded config module: app.config.{env_name}.{env_name}")
+        module = import_module(f"services.dashboard.app.config.{env_name}.{env_name}")
+        logger.info(f"Loaded config module: services.dashboard.app.config.{env_name}.{env_name}")
         return getattr(module, f"{env_name.capitalize()}Config")
     except (ModuleNotFoundError, AttributeError):
         raise ValueError(f"No config class found for environment '{env_name}'")
@@ -148,8 +148,16 @@ def create_app():
     # Prometheus metrics instrumentation
     init_metrics(app)
 
+
     logger.info("Registering blueprints...")
     register_blueprints(app)
+    # Register alerts blueprint explicitly
+    try:
+        from app.modules.alerts.views import bp as alerts_bp
+        app.register_blueprint(alerts_bp)
+        logger.info("Alerts blueprint registered at /alerts")
+    except Exception as e:
+        logger.error(f"Failed to register alerts blueprint: {e}")
     logger.info("Blueprints registered.")
 
     @app.route("/robots.txt")
@@ -195,7 +203,7 @@ def create_app():
             if module_dir.is_dir() and (module_dir / "__init__.py").exists():
                 _import_models_recursive(module_dir, full_module_path)
     try:
-        import app.modules as modules_pkg
+        import services.dashboard.app.modules as modules_pkg
         modules_path = Path(modules_pkg.__path__[0])
         _import_models_recursive(modules_path)
     except Exception:

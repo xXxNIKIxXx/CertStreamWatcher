@@ -4,12 +4,12 @@ FROM python:3.11-slim AS builder
 WORKDIR /app
 
 # Install build dependencies INCLUDING rust
-COPY ./services/dashboard/requirements.txt .
+COPY ./services/dashboard/requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
         apt-get update && apt-get install -y --no-install-recommends \
             build-essential python3-dev libffi-dev libssl-dev curl cargo rustc && \
         python -m pip install --upgrade pip setuptools wheel && \
-        pip install --prefix=/install --no-cache-dir -r requirements.txt && \
+        pip install --prefix=/install --no-cache-dir -r /app/requirements.txt && \
         rm -rf /var/lib/apt/lists/*
 
 LABEL org.opencontainers.image.source="https://github.com/xXxNikixXx/CertStreamWatcher"
@@ -36,10 +36,10 @@ COPY --from=builder /install /usr/local
 
 
 # Copy shared models for import
-COPY ./services/shared ./shared
+COPY ./services/shared /app/services/shared
 
 # Copy application files
-COPY ./services/dashboard .
+COPY ./services/dashboard /app/services/dashboard
 
 # Entrypoint
 # docker-entrypoint.sh lives in app/dashboard relative to project root

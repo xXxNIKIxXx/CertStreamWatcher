@@ -12,7 +12,7 @@ from flask import jsonify
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from app.core import clickhouse
+from services.dashboard.app.core import clickhouse
 
 
 logger = logging.getLogger(__name__)
