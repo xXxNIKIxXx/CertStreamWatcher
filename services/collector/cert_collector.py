@@ -655,7 +655,6 @@ class DynamicLogManager:
 
     async def run(self) -> None:
         """Main loop: start workers once, then reconcile log tasks on assignment."""
-        from .models import CTLog as _CTLog
 
         self._parse_queue = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
         self._write_queue = asyncio.Queue(maxsize=WRITE_QUEUE_MAXSIZE)
@@ -688,7 +687,7 @@ class DynamicLogManager:
 
             def _get_logs():
                 with self._db.Session() as session:
-                    from .models import CTLog as _CTLog2
+                    from services.shared.models import CTLog as _CTLog2
                     return session.query(_CTLog2).all()
 
             all_logs = await asyncio.to_thread(_get_logs)
