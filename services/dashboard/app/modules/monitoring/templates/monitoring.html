@@ -12,7 +12,7 @@
 <!-- Status cards -->
 <div class="row g-3 mb-4" id="health-cards">
   <!-- Database -->
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-body-secondary mb-2">
@@ -25,27 +25,8 @@
       </div>
     </div>
   </div>
-  <!-- Redis -->
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-body">
-        <h6 class="card-subtitle text-body-secondary mb-2">
-          <i class="bi bi-hdd-network me-1"></i>Redis
-        </h6>
-        <div id="redis-status">
-          {% if redis_configured %}
-          <span class="dot dot-mute"></span>
-          <span class="text-body-secondary small">Checking…</span>
-          {% else %}
-          <span class="dot dot-warn"></span>
-          <span class="small">Disabled (no CT_REDIS_URL)</span>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
   <!-- Collectors -->
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="card h-100">
       <div class="card-body">
         <h6 class="card-subtitle text-body-secondary mb-2">
@@ -107,18 +88,6 @@ function refresh() {
           '<small>Rows: <strong>' + Number(db.row_count).toLocaleString() + '</strong> · Size: <strong>' + db.db_size + '</strong></small>';
       } else {
         dbEl.innerHTML = dotHtml('err') + ' <strong class="small text-danger">Error</strong><br><small class="text-danger">' + (db.error || 'Unknown') + '</small>';
-      }
-
-      // Redis
-      const rd = data.redis;
-      const rdEl = document.getElementById('redis-status');
-      if (rd.status === 'ok') {
-        rdEl.innerHTML = dotHtml('ok') + ' <strong class="small">Connected</strong> (v' + rd.version + ')<br>' +
-          '<small>Uptime: ' + Math.round(rd.uptime_seconds/3600) + 'h · Clients: ' + rd.connected_clients + '</small>';
-      } else if (rd.status === 'disabled') {
-        rdEl.innerHTML = dotHtml('warn') + ' <span class="small">Disabled</span><br><small class="text-body-secondary">' + (rd.info || '') + '</small>';
-      } else {
-        rdEl.innerHTML = dotHtml('err') + ' <strong class="small text-danger">Error</strong><br><small class="text-danger">' + (rd.error || 'Unknown') + '</small>';
       }
 
       // Collectors

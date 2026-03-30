@@ -26,7 +26,7 @@ bp = Blueprint(
 
 logger = logging.getLogger(__name__)
 
-REDIS_URL = os.getenv("CT_REDIS_URL") or None
+
 
 # Service name for DNS-based discovery (single A-record lookup)
 _COLLECTOR_SERVICE = os.getenv("CT_COLLECTOR_SERVICE", "collector")
@@ -42,35 +42,10 @@ _mem_tracker: dict[str, float] = {}
 def _track_collectors(live_ips: set[str]) -> set[str]:
     """Persist *live_ips* and return the union with recently-seen IPs.
 
-    Uses Redis (sorted set with timestamps) when available, otherwise
-    falls back to an in-memory dict.  IPs older than ``_TRACKER_TTL``
+    Uses only an in-memory dict. IPs older than ``_TRACKER_TTL``
     seconds are automatically evicted.
     """
     now = time.time()
-
-    if REDIS_URL:
-        try:
-            import redis as redis_lib
-            r = redis_lib.from_url(REDIS_URL, socket_connect_timeout=2)
-            key = "ct:collector_tracker"
-
-            # Store / refresh every live IP with the current timestamp
-            if live_ips:
-                r.zadd(key, {ip: now for ip in live_ips})
-
-            # Evict IPs not seen for longer than the TTL
-            r.zremrangebyscore(key, "-inf", now - _TRACKER_TTL)
-
-            # Return all tracked IPs
-            all_ips = {
-                m.decode() if isinstance(m, bytes) else m
-                for m in r.zrange(key, 0, -1)
-            }
-            return all_ips | live_ips
-        except Exception as exc:
-            logger.debug("Redis tracker unavailable, using memory: %s", exc)
-
-    # ---------- In-memory fallback ----------
     for ip in live_ips:
         _mem_tracker[ip] = now
 
@@ -130,8 +105,7 @@ def _discover_collectors():
 def index():
     """Render the health / monitoring page."""
     return render_template(
-        "monitoring.html",
-        redis_configured=REDIS_URL is not None,
+        "monitoring.html"
     )
 
 
@@ -140,7 +114,6 @@ def api_status():
     """JSON health check for DB, Redis, and each collector."""
     result = {
         "database": _check_db(),
-        "redis": _check_redis(),
         "collectors": _check_collectors(),
     }
     return jsonify(result)
@@ -188,27 +161,6 @@ def _check_db():
             DB_QUERY_DURATION.labels(endpoint="monitoring._check_db").observe(
                 time.monotonic() - t0
             )
-        return {"status": "error", "error": str(exc)}
-
-
-def _check_redis():
-    if not REDIS_URL:
-        return {"status": "disabled", "info": "CT_REDIS_URL not set"}
-
-    try:
-        import redis as redis_lib
-        r = redis_lib.from_url(REDIS_URL, socket_connect_timeout=3)
-        info = r.info(section="server")
-        return {
-            "status": "ok",
-            "version": info.get("redis_version", "?"),
-            "uptime_seconds": info.get("uptime_in_seconds", 0),
-            "connected_clients": r.info(
-                section="clients"
-            ).get("connected_clients", 0),
-        }
-    except Exception as exc:
-        logger.debug("Redis health-check failed: %s", exc)
         return {"status": "error", "error": str(exc)}
 
 
