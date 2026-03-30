@@ -544,7 +544,7 @@ class CertWriter:
             "fingerprint_sha256": cert.get("fingerprint_sha256", ""),
             "ct_entry_type":      cert.get("ct_entry_type", ""),
             "format":             "",   # reserved for future use
-            "scripting_score":    0,
+            "scripting_score":    cert.get("scripting_score", 0),
         })
 
     async def flush_if_due(self) -> None:
