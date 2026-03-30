@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Service name for DNS-based discovery (single A-record lookup)
 _COLLECTOR_SERVICE = os.getenv("CT_COLLECTOR_SERVICE", "collector")
-_COLLECTOR_PORT = int(os.getenv("CT_COLLECTOR_PORT", "8000"))
+_COLLECTOR_PORT = int(os.getenv("CT_COLLECTOR_PORT", "8001"))
 
 # How long (seconds) to remember a collector after it disappears from DNS
 _TRACKER_TTL = int(os.getenv("CT_COLLECTOR_TRACKER_TTL", "300"))  # 5 min
@@ -164,7 +164,7 @@ def _check_db():
         return {"status": "error", "error": str(exc)}
 
 
-#TODO: FIX LOADING INDEFENETELY IF COLLECTOR CRASHES (CURRENTLY HANGS ON REQUEST)
+#TODO: FIX VALUES PARSING BECUASE METRICS UPDATED
 def _check_collectors():
     import urllib.request
     import urllib.error
