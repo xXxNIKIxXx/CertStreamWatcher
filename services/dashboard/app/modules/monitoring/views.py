@@ -155,7 +155,7 @@ def _check_db():
         DB_QUERY_COUNT.labels(endpoint="monitoring._check_db").inc()
     t0 = time.monotonic()
     try:
-        from app.core import clickhouse
+        from services.dashboard.app.core import clickhouse
         client = clickhouse.get_client(connect_timeout=3)
         try:
             ver = client.command("SELECT version()")
