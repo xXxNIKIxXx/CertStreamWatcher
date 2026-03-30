@@ -34,16 +34,3 @@ class CTLogModel(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-# Pydantic models for filter rules and settings
-class FilterRule(BaseModel):
-    field: str
-    op: str
-    value: Any
-    enabled: Optional[bool] = True
-
-
-class FilterSettings(BaseModel):
-    default_action: str = Field(..., pattern="^(allow|deny)$")
-    filters: List[FilterRule] = []

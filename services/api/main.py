@@ -94,11 +94,9 @@ def create_app() -> FastAPI:
 
     # -- Register routers --------------------------------------------------
 
-    from .routes.filters import router as filters_router
     from .routes.ctlogoperator import router as ctlogoperator_router
     from .routes.ctlog import router as ctlog_router
 
-    app.include_router(filters_router, prefix="/api/v1")
     app.include_router(ctlogoperator_router, prefix="/api/v1")
     app.include_router(ctlog_router, prefix="/api/v1")
 
