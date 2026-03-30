@@ -22,3 +22,4 @@ clickhouse-connect==0.14.0
 sqlalchemy==2.0.32
 clickhouse-sqlalchemy==0.3.2
 python-dotenv==1.2.2
+pydantic[email]==2.12.5

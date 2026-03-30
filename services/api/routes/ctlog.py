@@ -1,38 +1,14 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 from services.shared.models import CTLog
 from services.api.db_session import SessionLocal
 from sqlalchemy.future import select
 
+from ..models import CTLogModel
 from ..util.mutation_guard import mutation_guard
 
 # CTLog endpoints
 router = APIRouter(prefix="/ctlog", tags=["CTLog"])
-
-
-
-class CTLogModel(BaseModel):
-    id: str
-    operator_id: Optional[str]
-    description: Optional[str]
-    log_id: Optional[str]
-    key: Optional[str]
-    url: Optional[str]
-    mmd: Optional[int]
-    state: Optional[str]
-    temporal_interval_start: Optional[datetime]
-    temporal_interval_end: Optional[datetime]
-    status: Optional[str]
-    is_tiled: Optional[bool]
-    submission_url: Optional[str]
-    monitoring_url: Optional[str]
-    added_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
 
 @router.get("/", response_model=List[CTLogModel])
 def list_ctlogs():

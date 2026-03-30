@@ -1,24 +1,14 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from services.shared.models import CTLogOperator
-from datetime import datetime
 from services.api.db_session import SessionLocal
 from sqlalchemy.future import select
+
+from ..models import CTLogOperatorModel
 
 from ..util.mutation_guard import mutation_guard
 
 router = APIRouter(prefix="/ctlogoperator", tags=["CTLogOperator"])
-
-
-class CTLogOperatorModel(BaseModel):
-    id: str
-    name: Optional[str]
-    email: Optional[str]
-    added_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 @router.get("/", response_model=List[CTLogOperatorModel])
