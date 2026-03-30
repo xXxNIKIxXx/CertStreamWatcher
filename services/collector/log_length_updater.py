@@ -46,7 +46,7 @@ class LogLengthUpdater:
 
     async def _fetch_logs(self):
         def _query():
-            from .models import CTLog
+            from services.shared.models import CTLog
             with self.db.Session() as session:
                 logs   = session.query(CTLog).all()
                 normal = [l for l in logs if not getattr(l, "is_tiled", False)]

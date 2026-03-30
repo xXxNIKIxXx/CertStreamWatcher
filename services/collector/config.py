@@ -4,7 +4,7 @@ All tunables can be overridden via environment variables.
 """
 
 import os
-
+from services.shared.config import DB_DSN
 
 # CT log list (Google's public list)
 LOG_LIST_URL = os.getenv(
@@ -21,14 +21,10 @@ BACKFILL_DELAY  = 2      # seconds between backfill cycles
 
 # Database
 DB_FLUSH_INTERVAL = 5
-DB_DSN = os.getenv(
-    "CT_DB_DSN",
-    "clickhouse+http://default:@localhost:8123/certstream",
-)
 DB = DB_DSN   # alias used by new collector
 
 
-SINGLE_NODE    = os.getenv("SINGLE_NODE", "0").strip().lower() in ("1", "true", "yes")
+SINGLE_NODE    = os.getenv("SINGLE_NODE", "1").strip().lower() in ("1", "true", "yes")
 # Redis config removed: all load balancing is now via worker index and DB polling.
 if SINGLE_NODE:
     WORKER_INDEX = 0

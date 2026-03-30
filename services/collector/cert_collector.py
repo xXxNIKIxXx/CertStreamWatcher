@@ -1,41 +1,10 @@
-"""
-cert_collector.py – Fetch and parse CT log entries.
-
-Supports both RFC 6962 (non-tiled) and Static CT API (tiled) logs.
-
-Architecture
-────────────
-
-One asyncio Task per log drives its slices.  All tasks share a single
-bounded asyncio.Queue and a fixed-size pool of parser workers.
-
-  Fetcher task (one per log)
-    ├─ non-tiled → GET /ct/v1/get-entries?start=N&end=M  (JSON)
-    └─ tiled     → GET <monitoring_url>/tile/data/<N>[.p/<count>]  (binary)
-         │
-         ▼  await queue.put(batch)   ← blocks here when queue is full
-  asyncio.Queue(maxsize=QUEUE_MAXSIZE)   ← BACKPRESSURE point
-         │
-         ▼  await queue.get()
-  Parser workers × PARSER_WORKERS
-    └─ asyncio.to_thread(parse_entries_bulk | parse_tile_data)
-         └─ write_queue.put(parsed)  ← blocks when queue is full
-  asyncio.Queue(maxsize=WRITE_QUEUE_MAXSIZE)
-         └─ _cert_writer_worker()
-              └─ CertWriter.flush() → INSERT INTO ct_certs
-
-Backpressure: if parsers are slower than fetchers, queue.put() blocks the
-fetcher – no OOM, no crash.  Fetchers never build an unbounded in-memory
-buffer.
-"""
-
 import asyncio
 
 import time as _time
 
 import aiohttp
 
-from .models import CTLog, CTLogSlice
+from services.shared.models import CTLog, CTLogSlice
 from .config import BATCH_SIZE, USER_AGENT
 from services.shared.logger import get_logger
 from .database import SliceWriter, CertWriter
@@ -85,17 +54,7 @@ TILE_WIDTH = 256  # tiled logs: entries per full data tile (spec-fixed)
 # Entry points
 # ─────────────────────────────────────────────────────────────────────
 
-async def collect_all_logs_dynamic(
-    db,
-    poll_interval: int = 30,
-    filter_manager=None,
-):
-    """
-    Manage one collector Task per active log.  Refreshes the log list every
-    poll_interval seconds.  Shares one parse queue + worker pool globally.
-
-    filter_manager   – FilterManager for broadcast gating (None = broadcast all)
-    """
+async def collect_all_logs_dynamic(db, poll_interval: int = 30):
     log_tasks: dict[str, asyncio.Task] = {}
 
     parse_queue: asyncio.Queue = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
@@ -104,7 +63,7 @@ async def collect_all_logs_dynamic(
     metrics.active_parser_workers.set(PARSER_WORKERS)
     for _ in range(PARSER_WORKERS):
         asyncio.create_task(_parser_worker(parse_queue, write_queue))
-    asyncio.create_task(_cert_writer_worker(write_queue, db, filter_manager))
+    asyncio.create_task(_cert_writer_worker(write_queue, db))
 
     while True:
         def _get_logs():
@@ -119,7 +78,6 @@ async def collect_all_logs_dynamic(
                 log_tasks[log.id] = asyncio.create_task(
                     collect_log_forever(
                         log, db=db, parse_queue=parse_queue,
-                        filter_manager=filter_manager,
                     ),
                     name=f"collector-{log.id}",
                 )
@@ -142,9 +100,7 @@ async def collect_all_logs_dynamic(
 async def collect_log_forever(
     log: CTLog,
     db=None,
-    parse_queue: "asyncio.Queue | None" = None,
-    redis_publisher=None,
-    filter_manager=None,
+    parse_queue: "asyncio.Queue | None" = None
 ):
     """Drive all pending slices of one log, then poll for new work."""
     writer = SliceWriter(db, flush_every=FLUSH_EVERY) if db is not None else None
@@ -597,12 +553,16 @@ async def _parser_worker(parse_queue: asyncio.Queue, write_queue: asyncio.Queue)
 async def _cert_writer_worker(
     write_queue: asyncio.Queue,
     db,
-    filter_manager=None,
 ) -> None:
     """
     Single worker that drains write_queue, persists certs to ClickHouse,
     and broadcasts filtered certs to Redis (multi-node) and/or WebSocket.
     """
+    from .scoring import CertScoring
+    from .util.score_config_loader import _load_scoring_config
+
+    scorrer = CertScoring(**_load_scoring_config())
+
     if db is None:
         while True:
             await write_queue.get()
@@ -616,40 +576,19 @@ async def _cert_writer_worker(
         log_url, certs = await write_queue.get()
         last_log_url = log_url
         try:
-            # ── Pipeline: filter → score → write → broadcast ──────────────
+            # ── Pipeline: score → write ──────────────
             #
-            # 1. FILTER  – drop certs that don't pass early, before scoring
-            #              or any DB work.  Keeps CPU and DB load low.
-            # 2. SCORE   – compute scripting_score only on surviving certs.
-            # 3. WRITE   – buffer into CertWriter for ClickHouse INSERT.
-            # 4. BROADCAST – push to Redis / WebSocket.
+            # 1. SCORE   – compute scripting_score only on surviving certs.
+            # 2. WRITE   – buffer into CertWriter for ClickHouse INSERT.
             #
             # Certs that fail the filter are silently dropped; nothing is
             # written to the DB and nothing is broadcast for them.
-
-            # Step 1: filter
-            if filter_manager is not None:
-                try:
-                    kept = [c for c in certs if filter_manager.passes(c)]
-                except Exception:
-                    logger.exception("Filter error; keeping all certs")
-                    kept = certs
-            else:
-                kept = certs
-
-            if not kept:
-                continue
-
-            # Step 2: score (only on certs that survived the filter)
-            if filter_manager is not None:
-                for cert in kept:
-                    filter_manager.score(cert)
-            else:
-                for cert in kept:
-                    cert.setdefault("scripting_score", 0)
+            
+            for cert in certs:
+                cert["scripting_score"] = scorrer.score(cert)
 
             # Step 3: write to ClickHouse
-            for cert in kept:
+            for cert in certs:
                 cert_writer.record(cert, log_id=log_url)
 
             metrics.cert_writer_pending.set(len(cert_writer._pending))
@@ -666,8 +605,6 @@ async def _cert_writer_worker(
             else:
                 await cert_writer.flush_if_due()
 
-            # Step 4: (broadcast removed)
-
         except Exception as exc:
             logger.error(f"Cert writer worker error: {exc}")
             metrics.cert_write_errors_total.labels(log_url=log_url).inc()
@@ -675,33 +612,10 @@ async def _cert_writer_worker(
         finally:
             write_queue.task_done()
 
-
-# ─────────────────────────────────────────────────────────────────────
-# Debug printer (disabled by default)
-# ─────────────────────────────────────────────────────────────────────
-
-def _print_certs(certs: "list[dict]", log_url: str) -> None:
-    for cert in certs:
-        dns = ", ".join(cert["dns_names"]) if cert["dns_names"] else "(none)"
-        print(
-            f"[{cert['index']:>10}] {cert['ct_entry_type']:<14}"
-            f"  sha256={cert['fingerprint_sha256'][:16]}…"
-            f"  dns={dns}"
-            f"  issuer={cert['issuer'][:60]}"
-            f"  valid={cert['not_before'][:10]} → {cert['not_after'][:10]}"
-        )
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Broadcast helper  (called from _cert_writer_worker)
-# ─────────────────────────────────────────────────────────────────────
-
-
-
-
 # ─────────────────────────────────────────────────────────────────────
 # Dynamic log-list reassignment (called by WorkSubscriber in multi-node)
 # ─────────────────────────────────────────────────────────────────────
+
 
 class DynamicLogManager:
     """
@@ -719,14 +633,9 @@ class DynamicLogManager:
     def __init__(
         self,
         db,
-        redis_publisher=None,
-        ws_server=None,
-        filter_manager=None,
         poll_interval: int = 30,
     ) -> None:
         self._db              = db
-        self._ws              = ws_server
-        self._filter          = filter_manager
         self._poll_interval   = poll_interval
         self._log_tasks: dict[str, asyncio.Task] = {}
         self._assigned_logs: list[str] = []
@@ -759,7 +668,6 @@ class DynamicLogManager:
         asyncio.create_task(
             _cert_writer_worker(
                 self._write_queue, self._db,
-                self._redis, self._ws, self._filter,
             )
         )
 
@@ -801,8 +709,6 @@ class DynamicLogManager:
                             log_obj,
                             db=self._db,
                             parse_queue=self._parse_queue,
-                            ws_server=self._ws,
-                            filter_manager=self._filter,
                         ),
                         name=f"collector-{log_obj.id}",
                     )

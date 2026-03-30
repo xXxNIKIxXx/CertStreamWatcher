@@ -214,3 +214,4 @@ scripts/
 .VSCodeCounter/
 docker-compose-single-node.yml
 requirements-dev.txt
+services/collector/configs/external.yaml

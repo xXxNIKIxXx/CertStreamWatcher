@@ -84,7 +84,6 @@ import datetime
 from typing import Any
 
 from cryptography import x509
-from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
 
 # RFC 6962 entry type constants

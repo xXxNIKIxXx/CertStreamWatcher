@@ -38,7 +38,7 @@ from . import metrics
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
-from .models import Base, CTLog, CTLogSlice
+from services.shared.models import Base, CTLog, CTLogSlice
 import asyncio
 import datetime
 import sqlalchemy
@@ -77,8 +77,6 @@ class DatabaseManager:
     # ------------------------------------------------------------------
 
     async def init(self):
-        from .models import create_all_clickhouse_tables
-        create_all_clickhouse_tables(self.engine)
         await self._auto_migrate_all_models()
 
     async def _auto_migrate_all_models(self):
@@ -130,57 +128,6 @@ class DatabaseManager:
             metrics.db_errors_total.labels(operation="get_logs").inc()
             raise
 
-
-    # ------------------------------------------------------------------
-    # Filter / settings helpers
-    # ------------------------------------------------------------------
-
-    def insert_setting(self, key: str, value: str) -> None:
-        """Persist a key/value setting row to ct_settings (synchronous)."""
-        import datetime as _dt
-        now = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        def _run():
-            with self.engine.connect() as conn:
-                conn.execute(
-                    text(
-                        "INSERT INTO ct_settings (key, value, ts) "
-                        "VALUES (:key, :value, :ts)"
-                    ),
-                    {"key": key, "value": value, "ts": now},
-                )
-                conn.commit()
-        try:
-            import threading
-            if threading.current_thread() is threading.main_thread():
-                # Called from sync context — run directly
-                _run()
-            else:
-                _run()
-        except Exception as exc:
-            logger.error("insert_setting(%s) failed: %s", key, exc)
-
-    def get_latest_setting(self, key: str) -> "str | None":
-        """Return the most recent value for *key* from ct_settings, or None."""
-        def _run():
-            with self.engine.connect() as conn:
-                rows = conn.execute(
-                    text(
-                        "SELECT value FROM ct_settings "
-                        "WHERE key = :key "
-                        "ORDER BY ts DESC LIMIT 1"
-                    ),
-                    {"key": key},
-                ).fetchall()
-                return rows[0][0] if rows else None
-        try:
-            return _run()
-        except Exception as exc:
-            logger.error("get_latest_setting(%s) failed: %s", key, exc)
-            return None
-
-    async def get_latest_setting_async(self, key: str) -> "str | None":
-        """Async wrapper for get_latest_setting."""
-        return await asyncio.to_thread(self.get_latest_setting, key)
 
     def update_pool_metrics(self) -> None:
         """Push connection-pool gauges. Call periodically from the service loop."""
