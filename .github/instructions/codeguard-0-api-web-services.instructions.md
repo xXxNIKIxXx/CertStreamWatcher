@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.c,**/*.go,**/*.h,**/*.java,**/*.js,**/*.jsx,**/*.mjs,**/*.php,**/*.py,**/*.pyi,**/*.pyx,**/*.rb,**/*.ts,**/*.tsx,**/*.wsdl,**/*.xml,**/*.xsd,**/*.xslt,**/*.yaml,**/*.yml'
 description: API & Web services security (REST/GraphQL/SOAP), schema validation, authn/z, SSRF
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-api-web-services

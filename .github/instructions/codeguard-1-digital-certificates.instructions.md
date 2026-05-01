@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*'
 description: Certificate Best Practices
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-1-digital-certificates

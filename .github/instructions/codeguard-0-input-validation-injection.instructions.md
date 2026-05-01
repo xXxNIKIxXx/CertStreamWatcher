@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.bash,**/*.c,**/*.cls,**/*.ddl,**/*.dml,**/*.go,**/*.h,**/*.htm,**/*.html,**/*.java,**/*.js,**/*.jsx,**/*.mjs,**/*.php,**/*.ps1,**/*.py,**/*.pyi,**/*.pyx,**/*.rb,**/*.sh,**/*.sql,**/*.trigger,**/*.ts,**/*.tsx'
 description: Input validation and injection defense (SQL/SOQL/LDAP/OS), parameterization, prototype pollution
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-input-validation-injection

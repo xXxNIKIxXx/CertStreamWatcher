@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.c,**/*.go,**/*.h,**/*.java,**/*.js,**/*.jsx,**/*.kt,**/*.kts,**/*.m,**/*.mjs,**/*.php,**/*.py,**/*.pyi,**/*.pyx,**/*.rb,**/*.swift,**/*.ts,**/*.tsx,**/*.wsdl,**/*.xml,**/*.xsd,**/*.xslt,**/*.yaml,**/*.yml'
 description: Additional Cryptography guidance
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-additional-cryptography

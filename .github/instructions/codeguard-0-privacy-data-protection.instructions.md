@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.js,**/*.jsx,**/*.m,**/*.mjs,**/*.yaml,**/*.yml'
 description: Privacy & data protection (minimization, classification, encryption, rights, transparency)
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-privacy-data-protection

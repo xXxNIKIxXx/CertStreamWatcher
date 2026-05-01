@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.go,**/*.java,**/*.js,**/*.jsx,**/*.mjs,**/*.py,**/*.pyi,**/*.pyx,**/*.rs,**/*.ts,**/*.tsx'
 description: MCP (Model Context Protocol) Security based on CoSAI MCP Security guidelines
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-mcp-security

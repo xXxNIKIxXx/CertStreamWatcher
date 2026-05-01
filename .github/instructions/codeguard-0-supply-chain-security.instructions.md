@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.dockerfile,**/*.js,**/*.jsx,**/*.mjs,**/*.yaml,**/*.yml,Dockerfile*,docker-compose*'
 description: Dependency & supply chain security (pinning, SBOM, provenance, integrity, private registries)
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-supply-chain-security

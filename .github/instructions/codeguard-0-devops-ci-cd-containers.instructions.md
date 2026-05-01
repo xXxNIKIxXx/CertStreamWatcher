@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.bash,**/*.dockerfile,**/*.js,**/*.jsx,**/*.mjs,**/*.ps1,**/*.sh,**/*.wsdl,**/*.xml,**/*.xsd,**/*.xslt,**/*.yaml,**/*.yml,Dockerfile*,docker-compose*'
 description: DevOps, CI/CD, and containers (pipeline hardening, artifacts, Docker/K8s images, virtual patching, toolchain)
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-devops-ci-cd-containers

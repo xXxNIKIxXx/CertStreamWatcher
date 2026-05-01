@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.bash,**/*.c,**/*.d,**/*.h,**/*.js,**/*.jsx,**/*.mjs,**/*.ps1,**/*.rb,**/*.sh,**/*.yaml,**/*.yml'
 description: Infrastructure as Code Security
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-iac-security

@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.c,**/*.ddl,**/*.dml,**/*.h,**/*.js,**/*.jsx,**/*.mjs,**/*.sql,**/*.yaml,**/*.yml'
 description: Data & storage security (DB isolation, TLS, least privilege, RLS/CLS, backups, auditing)
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-data-storage

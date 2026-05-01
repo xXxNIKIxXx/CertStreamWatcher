@@ -1,7 +1,7 @@
 ---
 applyTo: '**/*.c,**/*.go,**/*.h,**/*.java,**/*.js,**/*.jsx,**/*.mjs,**/*.php,**/*.py,**/*.pyi,**/*.pyx,**/*.rb,**/*.ts,**/*.tsx'
 description: Secure file handling & uploads (validation, storage isolation, scanning, safe delivery)
-version: 1.3.0
+version: 1.3.1
 ---
 
 rule_id: codeguard-0-file-handling-and-uploads
