@@ -5,7 +5,7 @@ click==8.3.1
 colorama==0.4.6
 fastapi==0.135.1
 h11==0.16.0
-idna==3.11
+idna==3.15
 pydantic==2.12.5
 pydantic_core==2.41.5
 starlette==0.52.1
